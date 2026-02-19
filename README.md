@@ -6,19 +6,41 @@ A Python script that allows you to play music inside **Heartopia** (PC only).
 
 Personally, I believe this tool is harmless and mainly helps players enjoy the game.. It does **not** give any in-game advantage. Tools like this are common in social games with instrument systems.
 
-# Huge disclaimer (ai usage)
-because of an issue trying to make it possible to use piano semi tones took me 8 hours to find a fix to the point I even rewrote the entire code again multiple times and unfortunately none of the things I did worked, I had to use ai as last resort because I couldn't take it anymore and it fixed the issue, that means some of the code might've change/broke in certain visual aspects or changed without my knowledge like the keyboard visualizer, but I would rather have a working tool with better features than a graphical issue that I can fix later.
-
 ---
 
 ## Features
 
 * Play **MIDI files** directly in the game
-* Use a **physical MIDI keyboard**
-* Supports **15-key** and **22-key** and semi tones on piano
-* Playlist persistence (remembers loaded MIDI files between sessions)
-* Visual keyboard display
+* **Multi-instrument support** (Piano, Lute, Wooden Bass, Recorder, Violin)
+* Use a **physical MIDI keyboard** (currently only white keys supported)
+* Supports **15-key** and **22-key** layouts
+* Playlist persistence (remembers loaded MIDI files and instrument selection between sessions)
 * Simple GUI with playback controls
+
+---
+
+## Multi-Instrument Support
+
+You can now select different instruments when playing MIDI files. Each instrument has its own range of notes:
+
+| Instrument | Note Range | Keys | Description |
+|---|---|---|---|
+| **Piano** | C3 to C6 | 22 (with sharps/flats) | DEFAULT - Full chromatic range |
+| **Lute** | C3 to C5 | 15 (white keys only) | Warm, mellow tone |
+| **Wooden Bass** | C2 to C4 | 15 (white keys only) | Deep, resonant bass |
+| **Recorder** | C5 to C7 | 15 (white keys only) | Bright, flute-like tone |
+| **Violin** | C4 to C6 | 15 (white keys only) | Elegant, stringed sound |
+
+### Using Instruments in the UI
+1. Look for the **"Instrument:"** dropdown in the player interface
+2. Click to select any of the 5 available instruments
+3. The selected instrument will be used for playback of MIDI files
+4. Your selection is automatically saved and restored when you restart the app
+
+### How It Works
+- **15-key instruments** use only white keys (no sharps/flats) mapped to the same keyboard layout
+- **Piano** uses the full 22-key layout with both white and black keys
+- When MIDI notes fall outside the selected instrument's range, the player automatically transposes them to the nearest available octave
 
 ---
 
@@ -50,7 +72,7 @@ cd Heartopia-Midi-Player
 pip install -r requirements.txt
 ```
 
-3. Run the application as admin:
+3. Run the application:
 
 ```bash
 python main.py
@@ -62,27 +84,30 @@ python main.py
 * **Delete:** Remove selected MIDI files from the playlist.
 * **Play Selected:** Plays the selected MIDI file.
 * **Play Playlist:** Plays all MIDI files in order.
+* **Instrument:** Choose from Piano, Lute, Wooden Bass, Recorder, or Violin to match your in-game instrument.
+* **Layout:** Automatically configured based on selected instrument (15-key or 22-key).
 * **MIDI Keyboard:** Connect a MIDI keyboard and select it from the dropdown to play live.
 * **Stop:** Stops playback or live MIDI input.
-* **Layout:** Choose between 15-key or 22-key layouts to match your instrument.
 
-> The app will remember loaded MIDI files and the selected layout between sessions.
+> The app will remember loaded MIDI files and your instrument selection between sessions.
 
 ---
 
 ## Notes
 
-* 22-key layout adds an extra low octave to match certain pianos.
-* The app is intended for fun and personal use in **Heartopia** use responsibly.
+* The app is intended for fun and personal use in **Heartopia** - use responsibly.
+* Instrument preferences are automatically saved in `layout.json`.
+* MIDI notes are automatically transposed to fit within each instrument's range.
 
 ---
 
 ## Contributing
 
-Feel free to contribute! I built this in a few days, so there’s plenty of room for improvement:
+Feel free to contribute! I built this in a few days, so there's plenty of room for improvement:
 
 * Improve the visual keyboard mapping
 * Add more playback options (speed, looping, etc.)
+* Add more instruments
 
 ---
 

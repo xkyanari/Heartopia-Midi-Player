@@ -1,121 +1,144 @@
-import time
+import keyboard
 import threading
 import mido
-import keyboard
 
-# ------------------------------
-# Key mappings
-# ------------------------------
+import ctypes
+try:
+    ctypes.windll.winmm.timeBeginPeriod(1)
+except Exception:
+    pass
 
-NOTE_TO_KEY_15 = {
-    ("C", 4): "a", ("D", 4): "s", ("E", 4): "d", ("F", 4): "f", ("G", 4): "g",
-    ("A", 4): "h", ("B", 4): "j",
-    ("C", 5): "q", ("D", 5): "w", ("E", 5): "e", ("F", 5): "r", ("G", 5): "t",
-    ("A", 5): "y", ("B", 5): "u",
-    ("C", 6): "i"
+# Instrument definitions: (start_octave, (C, D, E, F, G, A, B), end_octave)
+INSTRUMENTS = {
+    "lute": {"start_octave": 3, "end_octave": 5, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
+    "wooden bass": {"start_octave": 2, "end_octave": 4, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
+    "piano": {"start_octave": 3, "end_octave": 6, "keys": None},  # Uses NOTE_TO_KEY_22 layout
+    "recorder": {"start_octave": 5, "end_octave": 7, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
+    "violin": {"start_octave": 4, "end_octave": 6, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
 }
+
+NATURAL_NOTES = ["C", "D", "E", "F", "G", "A", "B"]
+
+def note_to_midi_value(name, octave):
+    """Convert note name and octave to MIDI note value."""
+    midi_value = (octave + 1) * 12 + NATURAL_NOTES.index(name)
+    return midi_value
+
+def create_note_map_15(start_octave, keys):
+    """Create a 15-key note mapping for white notes only."""
+    note_map = {}
+    key_idx = 0
+    for octave in range(start_octave, start_octave + 3):  # 3 octaves = 21 notes, take first 15
+        for note in NATURAL_NOTES:
+            if key_idx < len(keys):
+                note_map[(note, octave)] = keys[key_idx]
+                key_idx += 1
+    return note_map
+
+NOTE_TO_KEY_15 = create_note_map_15(4, ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"])
 
 NOTE_TO_KEY_22 = {
-    ("C", 3): "z", ("D", 3): "x", ("E", 3): "c", ("F", 3): "v", ("G", 3): "b",
-    ("A", 3): "n", ("B", 3): "m",
-    ("C", 4): "a", ("D", 4): "s", ("E", 4): "d", ("F", 4): "f", ("G", 4): "g",
-    ("A", 4): "h", ("B", 4): "j",
-    ("C", 5): "q", ("D", 5): "w", ("E", 5): "e", ("F", 5): "r", ("G", 5): "t",
-    ("A", 5): "y", ("B", 5): "u",
-    ("C", 6): "i"
+ # --- LOW OCTAVE (Octave 3) ---
+    ("C", 3): ",",  ("C#", 3): "l",
+    ("D", 3): ".",  ("D#", 3): ";",
+    ("E", 3): "/",  
+    ("F", 3): "o",  ("F#", 3): "0",
+    ("G", 3): "p",  ("G#", 3): "-",
+    ("A", 3): "[",  ("A#", 3): "=",
+    ("B", 3): "]",
+
+    # --- MIDDLE OCTAVE (Octave 4) ---
+    ("C", 4): "z",  ("C#", 4): "s",
+    ("D", 4): "x",  ("D#", 4): "d",
+    ("E", 4): "c",
+    ("F", 4): "v",  ("F#", 4): "g",
+    ("G", 4): "b",  ("G#", 4): "h",
+    ("A", 4): "n",  ("A#", 4): "j",
+    ("B", 4): "m",
+
+    # --- HIGH OCTAVE (Octave 5) ---
+    ("C", 5): "q",  ("C#", 5): "2",
+    ("D", 5): "w",  ("D#", 5): "3",
+    ("E", 5): "e",
+    ("F", 5): "r",  ("F#", 5): "5",
+    ("G", 5): "t",  ("G#", 5): "6",
+    ("A", 5): "y",  ("A#", 5): "7",
+    ("B", 5): "u",
+
+    # --- TOP NOTE ---
+    ("C", 6): "i",
 }
-
-NOTE_TO_KEY_PIANO = {
-    ("C", 6): "q",("C#", 6): "2",("D", 6): "w",("D#", 6): "3",("E", 6): "e",("F", 6): "r",
-    ("F#", 6): "5",("G", 6): "t",("G#", 6): "6",("A", 6): "y",("A#", 6): "7",("B", 6): "u",
-    ("C", 7): "i",
-
-    ("C", 4): "z",("C#", 4): "s",("D", 4): "x",("D#", 4): "d",("E", 4): "c",("F", 4): "v",
-    ("F#", 4): "g",("G", 4): "b",("G#", 4): "h",("A", 4): "n",("A#", 4): "j",("B", 4): "m",
-    
-    ("C", 3): ",",("C#", 3): "l",("D", 3): ".",("D#", 3): ";",("E", 3): "/",("F", 3): "o",
-    ("F#", 3): "0",("G", 3): "p",("G#", 3): "-",("A", 3): "[",("A#", 3): "=",("B", 3): "]",
-}
-
 
 MIN_OCTAVE = 1
-MAX_OCTAVE = 6
+MAX_OCTAVE = 7
 
 # KeyboardPlayer: plays MIDI files
 class KeyboardPlayer:
-    def __init__(self, layout="15"):
+    def __init__(self, layout="22", instrument="piano"):
         self.stop_flag = False
-        self.thread = None
-        self.set_layout(layout)
+        self.instrument = instrument
+        self.set_layout_and_instrument(layout, instrument)
 
     def set_layout(self, layout):
+        """Deprecated: use set_layout_and_instrument instead."""
+        self.set_layout_and_instrument(layout, self.instrument)
+
+    def set_layout_and_instrument(self, layout, instrument):
+        """Set both layout and instrument."""
         self.layout = layout
-        if layout == "15":
-            self.note_map = NOTE_TO_KEY_15
-        elif layout == "22":
+        self.instrument = instrument
+        
+        if instrument == "piano":
             self.note_map = NOTE_TO_KEY_22
-        elif layout == "piano":
-            self.note_map = NOTE_TO_KEY_PIANO
         else:
-            raise ValueError(f"Unknown layout: {layout}")
+            # Get instrument definition
+            if instrument in INSTRUMENTS:
+                instr = INSTRUMENTS[instrument]
+                self.note_map = create_note_map_15(instr["start_octave"], instr["keys"])
+            else:
+                # Fallback to piano
+                self.note_map = NOTE_TO_KEY_22
 
     def stop(self):
         self.stop_flag = True
 
     def get_playable_key(self, note):
-        # Piano mode: strict mapping
-        '''if self.layout == "piano":
-            return self.note_map.get(note)'''
+            name, octave = note
+            
+            flats_to_sharps = {
+                "Db": "C#", "Eb": "D#", "Gb": "F#", "Ab": "G#", "Bb": "A#"
+            }
+            if name in flats_to_sharps:
+                name = flats_to_sharps[name]
 
-        # 15/22 mode: octave shifting
-        name, octave = note
-        if (name, octave) in self.note_map:
-            return self.note_map[(name, octave)]
-
-        orig_octave = octave
-        while octave < MAX_OCTAVE:
-            octave += 1
-            if (name, octave) in self.note_map:
-                return self.note_map[(name, octave)]
-        octave = orig_octave
-        while octave > MIN_OCTAVE:
-            octave -= 1
-            if (name, octave) in self.note_map:
-                return self.note_map[(name, octave)]
-        return None
-
-    def play(self, events, speed=1.0, on_key_press=None):
-        self.stop_flag = False
-
-        def run():
-            for delay, notes in events:
-                if self.stop_flag:
-                    break
-                time.sleep(delay / speed)
-                keys = [self.get_playable_key(n) for n in notes if self.get_playable_key(n)]
-                for k in keys:
-                    keyboard.press(k)
-                if on_key_press:
-                    on_key_press(keys)
-                time.sleep(0.03)
-                for k in keys:
-                    keyboard.release(k)
-                if on_key_press:
-                    on_key_press([])
-
-        self.thread = threading.Thread(target=run, daemon=True)
-        self.thread.start()
-
+            while (name, octave) not in self.note_map and octave < MAX_OCTAVE:
+                octave += 1
+            while (name, octave) not in self.note_map and octave > MIN_OCTAVE:
+                octave -= 1
+                
+            return self.note_map.get((name, octave))
 
 # MidiInputPlayer: live MIDI keyboard
 class MidiInputPlayer:
-    def __init__(self, note_to_key=None, on_key_press=None, transpose=0, tap_length=0.03):
-        self.note_to_key = note_to_key or NOTE_TO_KEY_15
+    def __init__(self, layout="22", instrument="piano", note_to_key=None, on_key_press=None, transpose=0):
         self.on_key_press = on_key_press
         self.transpose = transpose
-        self.tap_length = tap_length
         self.stop_flag = False
         self.thread = None
+        self.instrument = instrument
+        
+        # Support both old and new initialization
+        if note_to_key is not None:
+            self.note_to_key = note_to_key
+        else:
+            if instrument == "piano":
+                self.note_to_key = NOTE_TO_KEY_22
+            else:
+                if instrument in INSTRUMENTS:
+                    instr = INSTRUMENTS[instrument]
+                    self.note_to_key = create_note_map_15(instr["start_octave"], instr["keys"])
+                else:
+                    self.note_to_key = NOTE_TO_KEY_22
 
     def stop(self):
         self.stop_flag = True
@@ -144,7 +167,6 @@ class MidiInputPlayer:
                             keyboard.press(key)
                             if self.on_key_press:
                                 self.on_key_press([key])
-                            time.sleep(self.tap_length)
                             keyboard.release(key)
                             if self.on_key_press:
                                 self.on_key_press([])
@@ -157,4 +179,9 @@ class MidiInputPlayer:
         midi_note += self.transpose
         name = NOTE_NAMES[midi_note % 12]
         octave = midi_note // 12 - 1
+
+        while (name, octave) not in self.note_to_key and octave < MAX_OCTAVE:
+            octave += 1
+        while (name, octave) not in self.note_to_key and octave > MIN_OCTAVE:
+            octave -= 1
         return self.note_to_key.get((name, octave))
