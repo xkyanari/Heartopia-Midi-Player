@@ -25,6 +25,29 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 
 ---
 
+## MIDI Input Enhancements (Live Keyboard & File Playback)
+
+The player now supports advanced MIDI processing for better performance with both live keyboard input and MIDI file playback:
+
+### Note Folding (Octave Shifting)
+- **Automatic octave wrapping**: Notes outside the instrument's range are shifted by full octaves (12 semitones) until they fit
+- **Preserves musical structure**: Deep bass notes become playable mid-range notes instead of being dropped
+- **Works with all instruments**: Piano, lute, violin, cello, etc. all benefit from this
+- **Applies to both**: MIDI file playback AND live keyboard input
+
+### Note Merging (Chord Cleaning) - Live Keyboard Only
+- **Chord buffering**: Notes arriving within a 20ms window are grouped as chords
+- **Simultaneous key presses**: All notes in a chord are pressed at the same time
+- **Cleaner timing**: Eliminates "stair-step" effect from slightly offset MIDI timing
+- **Automatic release**: Chords are released together after sustain period
+
+### How MIDI Input Works
+1. **For MIDI Files**: Notes are processed through octave folding to ensure all notes fit within the selected instrument's range
+2. **For Live Keyboard**: Connect a MIDI keyboard and play notes - they'll be processed through both folding and merging for optimal timing
+3. **Automatic Detection**: The player automatically detects and uses the first available MIDI input device
+
+---
+
 ## MIDI Input Enhancements (Live Keyboard)
 
 The player now supports advanced MIDI input processing for better live keyboard performance:
