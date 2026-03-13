@@ -25,6 +25,30 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 
 ---
 
+## MIDI Input Enhancements (Live Keyboard)
+
+The player now supports advanced MIDI input processing for better live keyboard performance:
+
+### Note Folding (Octave Shifting)
+- **Automatic octave wrapping**: Notes outside the instrument's range are shifted by full octaves (12 semitones) until they fit
+- **Preserves musical structure**: Deep bass notes become playable mid-range notes instead of being dropped
+- **Works with all instruments**: Piano, lute, violin, cello, etc.
+
+### Note Merging (Chord Cleaning)  
+- **Chord buffering**: Notes arriving within a 20ms window are grouped as chords
+- **Simultaneous key presses**: All notes in a chord are pressed at the same time
+- **Cleaner timing**: Eliminates "stair-step" effect from slightly offset MIDI timing
+- **Automatic release**: Chords are released together after sustain period
+
+### How MIDI Input Works
+1. Connect a MIDI keyboard to your computer
+2. The player will automatically detect and use the first available MIDI input
+3. Play notes on your keyboard - they'll be mapped to Heartopia keys
+4. Notes are processed through folding/merging for optimal timing
+5. Use the instrument selector to change how notes are mapped
+
+---
+
 ## Multi-Instrument Support
 
 You can now select different instruments when playing MIDI files. Each instrument has its own range of notes:
