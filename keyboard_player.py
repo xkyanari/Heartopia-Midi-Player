@@ -171,31 +171,84 @@ class MidiInputPlayer:
                     return
                 port_name = ports[0]
 
+            chord_buffer = []
+            buffer_timeout = 0.020  # 20 milliseconds window for merging notes into chords
+            last_msg_time = 0
+            buffer_timer = None
+
+            def process_chord_buffer():
+                nonlocal chord_buffer, buffer_timer
+                if chord_buffer:
+                    # Press all keys in the chord simultaneously
+                    pressed_keys = []
+                    for midi_note in chord_buffer:
+                        key = self.get_playable_key(midi_note)
+                        if key:
+                            keyboard.press(key)
+                            pressed_keys.append(key)
+                    
+                    if pressed_keys and self.on_key_press:
+                        self.on_key_press(pressed_keys)
+                    
+                    # Release all keys after a short sustain
+                    def release_chord(keys):
+                        for key in keys:
+                            keyboard.release(key)
+                        if self.on_key_press:
+                            self.on_key_press([])
+                    
+                    # Schedule release after sustain time (adjust as needed)
+                    threading.Timer(0.1, release_chord, args=[pressed_keys]).start()
+                    
+                    chord_buffer.clear()
+                buffer_timer = None
+            # -------------------------------------------------------------
+
             with mido.open_input(port_name) as inport:
                 for msg in inport:
                     if self.stop_flag:
                         break
+                    
+                    current_time = msg.time if hasattr(msg, 'time') else 0
+                    
                     if msg.type == 'note_on' and msg.velocity > 0:
-                        key = self.get_playable_key(msg.note)
-                        if key:
-                            keyboard.press(key)
-                            if self.on_key_press:
-                                self.on_key_press([key])
-                            keyboard.release(key)
-                            if self.on_key_press:
-                                self.on_key_press([])
+                        # Add note to buffer
+                        chord_buffer.append(msg.note)
+                        
+                        # Start or reset the buffer timer
+                        if buffer_timer:
+                            buffer_timer.cancel()
+                        buffer_timer = threading.Timer(buffer_timeout, process_chord_buffer)
+                        buffer_timer.start()
+                        
+                        last_msg_time = current_time
+                        
         except Exception as e:
             print(f"MIDI input error: {e}")
+        finally:
+            # Clean up any remaining timer
+            if 'buffer_timer' in locals() and buffer_timer:
+                buffer_timer.cancel()
 
     def get_playable_key(self, midi_note):
         NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F",
                       "F#", "G", "G#", "A", "A#", "B"]
         midi_note += self.transpose
+        
+        # Find the min and max MIDI values your current instrument supports
+        supported_midi_values = [((oct + 1) * 12 + NOTE_NAMES.index(nm)) 
+                                 for (nm, oct) in self.note_to_key.keys()]
+        min_midi = min(supported_midi_values)
+        max_midi = max(supported_midi_values)
+
+        # Shift the note by full octaves (12 semitones) until it is within range
+        while midi_note < min_midi:
+            midi_note += 12
+        while midi_note > max_midi:
+            midi_note -= 12
+        # ----------------------------------------------------------
+        
         name = NOTE_NAMES[midi_note % 12]
         octave = midi_note // 12 - 1
-
-        while (name, octave) not in self.note_to_key and octave < MAX_OCTAVE:
-            octave += 1
-        while (name, octave) not in self.note_to_key and octave > MIN_OCTAVE:
-            octave -= 1
+        
         return self.note_to_key.get((name, octave))
