@@ -74,18 +74,32 @@ You can now select different instruments when playing MIDI files. Each instrumen
 | **Lute** | C3 to C5 | 15 (white keys only) | Warm, mellow tone |
 | **Wooden Bass** | C2 to C4 | 15 (white keys only) | Deep, resonant bass |
 | **Recorder** | C5 to C7 | 15 (white keys only) | Bright, flute-like tone |
-| **Violin** | C4 to C6 | 15 (white keys only) | Elegant, stringed sound |
+| **Violin** | C4 to C6 | 15 (white keys only) | Elegant, stringed sound with variable sustain |
+| **Cello** | C2 to C4 | 15 (white keys only) | Deep, rich tone with variable sustain |
 
 ### Using Instruments in the UI
 1. Look for the **"Instrument:"** dropdown in the player interface
-2. Click to select any of the 5 available instruments
+2. Click to select any of the 6 available instruments
 3. The selected instrument will be used for playback of MIDI files
 4. Your selection is automatically saved and restored when you restart the app
 
 ### How It Works
-- **15-key instruments** use only white keys (no sharps/flats) mapped to the same keyboard layout
+- **15-key instruments** use only white keys (no sharps/flats) mapped to the same keyboard layout. Sharps/flats are transposed to the nearest white key (e.g., C# → C, D# → E).
 - **Piano** uses the full 22-key layout with both white and black keys
+- **Violin & Cello** use MIDI note duration for sustain (capped at 4.5s and 5s respectively)
 - When MIDI notes fall outside the selected instrument's range, the player automatically transposes them to the nearest available octave
+
+---
+
+## New in v0.2.5
+
+* **Pause/Resume now works**: Press ⏸ to pause playback mid-song, resume with another press
+* **Auto-focus on play**: Automatically switches to Heartopia window when starting playback
+* **Auto-pause on focus loss**: Pauses automatically if you switch away from Heartopia during playback
+* **Window switching**: Pause brings focus back to the player, resume switches back to Heartopia
+* **Instant playback**: Removed 5-second delay, starts playing immediately
+* **Cello instrument**: Added with C2-C4 range and variable sustain (up to 5 seconds)
+* **Code cleanup**: Removed unused code and imports
 
 ---
 

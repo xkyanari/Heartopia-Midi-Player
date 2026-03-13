@@ -4,10 +4,6 @@ import os
 import json
 import mido
 import keyboard
-<<<<<<< HEAD
-import ctypes
-=======
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
 
 from midi_parser import parse_midi
 from keyboard_player import KeyboardPlayer, MidiInputPlayer, INSTRUMENTS, note_to_midi_value
@@ -26,64 +22,7 @@ current_layout = "22"
 current_instrument = "piano"  # Default instrument
 loop_mode = "none"  # "none", "one", or "all"
 is_paused = False
-<<<<<<< HEAD
-focus_check_id = None
-
-def switch_to_heartopia():
-    """Switch focus to the Heartopia game window."""
-    try:
-        # Find the Heartopia window by title
-        hwnd = ctypes.windll.user32.FindWindowW(None, "Heartopia")
-        if hwnd:
-            # Bring it to foreground
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-            return True
-        else:
-            # Try alternative titles if needed
-            for title in ["Heartopia", "Heartopia.exe", "Heartopia Game"]:
-                hwnd = ctypes.windll.user32.FindWindowW(None, title)
-                if hwnd:
-                    ctypes.windll.user32.SetForegroundWindow(hwnd)
-                    return True
-            return False
-    except Exception:
-        return False
-
-def switch_to_player():
-    """Switch focus to the MIDI player window."""
-    try:
-        hwnd = root.winfo_id()
-        ctypes.windll.user32.SetForegroundWindow(hwnd)
-    except Exception:
-        pass
-
-def get_foreground_window_title():
-    """Get the title of the currently foreground window."""
-    try:
-        hwnd = ctypes.windll.user32.GetForegroundWindow()
-        if hwnd:
-            buffer = ctypes.create_unicode_buffer(256)
-            ctypes.windll.user32.GetWindowTextW(hwnd, buffer, 256)
-            return buffer.value
-        return ""
-    except Exception:
-        return ""
-
-def check_heartopia_focus():
-    """Check if Heartopia is still the active window, pause if not."""
-    global focus_check_id
-    if playback_active and not is_paused:
-        title = get_foreground_window_title()
-        if "Heartopia" not in title:
-            pause_resume()
-    # Continue checking if still active
-    if playback_active:
-        focus_check_id = root.after(500, check_heartopia_focus)
-    else:
-        focus_check_id = None
-=======
 pause_time = 0.0
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
 
 # Tk setup
 root = tk.Tk()
@@ -108,11 +47,7 @@ KEY_HOLD_MS = 250  # Duration to hold each key (ms). Adjust if notes are missed 
 PLAYBACK_SPEED = 1.0  # Tempo multiplier: increase (1.5, 2.0) to slow down; decrease (0.8) to speed up.
 
 def cancel_playback():
-<<<<<<< HEAD
-    global playback_active, playback_after_ids, pressed_keys, focus_check_id
-=======
     global playback_active, playback_after_ids, pressed_keys
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
     playback_active = False
     global playback_gen
     playback_gen += 1
@@ -122,15 +57,6 @@ def cancel_playback():
         except Exception:
             pass
     playback_after_ids.clear()
-<<<<<<< HEAD
-    if focus_check_id:
-        try:
-            root.after_cancel(focus_check_id)
-        except Exception:
-            pass
-        focus_check_id = None
-=======
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
     for k in list(pressed_keys):
         try:
             keyboard.release(k)
@@ -165,18 +91,9 @@ def start_playback(events, speed=1.0, on_key_press=None):
         if on_key_press:
             on_key_press([])
 
-<<<<<<< HEAD
-    def calculate_sustain_time(note):
-        """Calculate sustain time for a single note based on MIDI duration.
-
-        Violin and cello should hold keys as long as the MIDI note lasts,
-        capped at the game’s maximum sustain value.
-        """
-        if current_instrument == "violin":
-            max_sustain = 4500
-        elif current_instrument == "cello":
-            max_sustain = 5000
-        else:
+    def calculate_sustain_time(notes):
+        """Calculate sustain time based on instrument and notes."""
+        if current_instrument != "violin":
             return KEY_HOLD_MS
 
         if not note or len(note) < 3:
@@ -184,31 +101,6 @@ def start_playback(events, speed=1.0, on_key_press=None):
 
         duration_ms = note[2]
         if duration_ms <= 0:
-            return KEY_HOLD_MS
-
-        return min(max_sustain, duration_ms)
-=======
-    def calculate_sustain_time(notes):
-        """Calculate sustain time based on instrument and notes."""
-        if current_instrument != "violin":
-            return KEY_HOLD_MS
-        
-        # For violin, vary sustain based on note pitch
-        # Lower notes sustain longer, higher notes sustain shorter
-        if not notes:
-            return KEY_HOLD_MS
-        
-        # Get MIDI values for all notes
-        midi_values = []
-        for note in notes:
-            name, octave = note
-            try:
-                midi_val = note_to_midi_value(name, octave)
-                midi_values.append(midi_val)
-            except (ValueError, IndexError):
-                pass
-        
-        if not midi_values:
             return KEY_HOLD_MS
         
         # Use average MIDI value if multiple notes
@@ -228,7 +120,6 @@ def start_playback(events, speed=1.0, on_key_press=None):
         # Lower MIDI value = higher sustain (inverted)
         sustain = max_sustain - (clamped - min_midi) * (max_sustain - min_sustain) / (max_midi - min_midi)
         return int(sustain)
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
 
     def play_note_index(i):
         if not playback_active or i >= len(events):
@@ -236,9 +127,7 @@ def start_playback(events, speed=1.0, on_key_press=None):
         delay, notes = events[i]
 
         def do_notes():
-<<<<<<< HEAD
-            # Cancel if playback stopped or replaced
-            if not playback_active or my_gen != playback_gen:
+            if not playback_active:
                 return
 
             # If paused, do not progress; keep checking until resumed.
@@ -266,31 +155,12 @@ def start_playback(events, speed=1.0, on_key_press=None):
                 playback_after_ids.append(rid)
 
             if on_key_press:
-                on_key_press(active_press_keys)
-
-=======
-            if not playback_active:
-                return
-            if my_gen != playback_gen:
-                return
-            keys = []
-            for note in notes:
-                key = player.get_playable_key(note)
-                if key:
-                    keys.append(key)
-                    try:
-                        keyboard.press(key)
-                        pressed_keys.add(key)
-                    except Exception:
-                        pass
-            if on_key_press:
                 on_key_press(keys)
             
             # Calculate sustain time based on instrument and notes
             sustain_ms = calculate_sustain_time(notes)
             rid = root.after(sustain_ms, lambda: release_keys(keys))
             playback_after_ids.append(rid)
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
             # schedule next note
             if my_gen == playback_gen and playback_active:
                 play_note_index(i+1)
@@ -298,13 +168,8 @@ def start_playback(events, speed=1.0, on_key_press=None):
         rid = root.after(int(delay * 1000 / PLAYBACK_SPEED), do_notes)
         playback_after_ids.append(rid)
 
-<<<<<<< HEAD
-    # initial delay before playback
-    rid = root.after(0, lambda: play_note_index(0))
-=======
     # initial delay before playback (3s)
     rid = root.after(5000, lambda: play_note_index(0))
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
     playback_after_ids.append(rid)
 
 # Title
@@ -387,11 +252,6 @@ def play_selected():
         return
     set_status(f"Playing: {playlist[current_index]['name']}")
     start_playback(events, on_key_press=highlight_keys)
-<<<<<<< HEAD
-    if switch_to_heartopia():  # Switch to Heartopia window for key presses
-        root.after(500, check_heartopia_focus)  # Start monitoring focus
-=======
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
     
     # If loop one is enabled, schedule replay after song ends
     if loop_mode == "one":
@@ -422,11 +282,6 @@ def play_playlist():
             return
         set_status(f"Playing: {playlist[idx]['name']}")
         start_playback(events, on_key_press=highlight_keys)
-<<<<<<< HEAD
-        if switch_to_heartopia():  # Switch to Heartopia window for key presses
-            root.after(500, check_heartopia_focus)  # Start monitoring focus
-=======
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
         # Schedule next song with duration + 6 second buffer
         wait_time = int((duration + 6) * 1000)
         aid = root.after(wait_time, lambda: play_next(idx+1))
@@ -440,28 +295,10 @@ def pause_resume():
         return
     is_paused = not is_paused
     if is_paused:
-<<<<<<< HEAD
-        # Release any held keys so the physical keyboard does not keep playing notes.
-        for k in list(pressed_keys):
-            try:
-                keyboard.release(k)
-            except Exception:
-                pass
-        pressed_keys.clear()
-        try:
-            highlight_keys([])
-        except Exception:
-            pass
         set_status("Paused")
         switch_to_player()  # Switch to player window when paused
     else:
         set_status("Resumed")
-        switch_to_heartopia()  # Switch back to Heartopia when resumed
-=======
-        set_status("Paused")
-    else:
-        set_status("Resumed")
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
 
 def skip_next():
     global current_index
@@ -624,13 +461,9 @@ tk.Frame(root, bg="#444444", height=1).pack(fill=tk.X, pady=10)
 footer = tk.Frame(root, bg="#1e1e1e")
 footer.pack(fill=tk.X, padx=10)
 
-<<<<<<< HEAD
-tk.Label(footer, text="v0.2.5", fg="#aaaaaa", bg="#1e1e1e").pack(side=tk.LEFT)
-=======
 tk.Label(footer, text="v0.2.0", fg="#aaaaaa", bg="#1e1e1e").pack(side=tk.LEFT)
 # tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),
 #           bg="#333333", fg="white").pack(side=tk.RIGHT)
->>>>>>> ed980df92986e11636f4ae00be55e32eded43ead
 
 # Saving songs
 def save_playlist():
