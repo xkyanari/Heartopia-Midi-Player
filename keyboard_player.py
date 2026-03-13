@@ -15,6 +15,7 @@ INSTRUMENTS = {
     "piano": {"start_octave": 3, "end_octave": 6, "keys": None},  # Uses NOTE_TO_KEY_22 layout
     "recorder": {"start_octave": 5, "end_octave": 7, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
     "violin": {"start_octave": 4, "end_octave": 6, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
+    "cello": {"start_octave": 2, "end_octave": 4, "keys": ["a", "s", "d", "f", "g", "h", "j", "q", "w", "e", "r", "t", "y", "u", "i"]},
 }
 
 NATURAL_NOTES = ["C", "D", "E", "F", "G", "A", "B"]
@@ -110,6 +111,19 @@ class KeyboardPlayer:
             }
             if name in flats_to_sharps:
                 name = flats_to_sharps[name]
+
+            # For 15-key instruments (non-piano), transpose sharps/flats to nearest white key
+            if self.instrument != "piano" and "#" in name:
+                sharps_to_white = {
+                    "C#": "C",
+                    "D#": "E",
+                    "F#": "G",
+                    "G#": "A",
+                    "A#": "B"
+                }
+                if name in sharps_to_white:
+                    name = sharps_to_white[name]
+                    # Optionally adjust octave if needed, but for simplicity, keep same octave
 
             while (name, octave) not in self.note_map and octave < MAX_OCTAVE:
                 octave += 1
