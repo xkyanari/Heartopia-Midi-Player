@@ -125,10 +125,25 @@ class KeyboardPlayer:
                     name = sharps_to_white[name]
                     # Optionally adjust octave if needed, but for simplicity, keep same octave
 
-            while (name, octave) not in self.note_map and octave < MAX_OCTAVE:
-                octave += 1
-            while (name, octave) not in self.note_map and octave > MIN_OCTAVE:
-                octave -= 1
+            # Convert note name and octave to MIDI value for octave math
+            midi_value = (octave + 1) * 12 + ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].index(name)
+            
+            # Find the min and max MIDI values your current instrument supports
+            supported_midi_values = [((oct + 1) * 12 + ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"].index(nm)) 
+                                     for (nm, oct) in self.note_map.keys()]
+            min_midi = min(supported_midi_values)
+            max_midi = max(supported_midi_values)
+
+            # Shift the note by full octaves (12 semitones) until it is within range
+            while midi_value < min_midi:
+                midi_value += 12
+            while midi_value > max_midi:
+                midi_value -= 12
+            
+            # Convert back to note name and octave
+            name = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][midi_value % 12]
+            octave = midi_value // 12 - 1
+            # ----------------------------------------------------------
                 
             return self.note_map.get((name, octave))
 
