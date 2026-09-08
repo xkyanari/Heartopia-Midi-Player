@@ -14,10 +14,10 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 
 * Play **MIDI files** directly in the game
 * **Multi-instrument support** (Piano, Lute, Wooden Bass, Recorder, Violin, Cello)
-* Use a **physical MIDI keyboard** (currently only white keys supported)
 * Supports **15-key** and **22-key** layouts
 * Playlist persistence (remembers loaded MIDI files and instrument selection between sessions)
 * Simple GUI with playback controls
+* **Musical Chairs mode**: randomly plays bounded 20-25 second excerpts from random songs, then switches without an end buffer
 * **Auto-focus** to Heartopia window on play
 * **Auto-pause** when switching away from Heartopia
 * **Window switching** on pause/resume for seamless control
@@ -25,52 +25,14 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 
 ---
 
-## MIDI Input Enhancements (Live Keyboard & File Playback)
+## MIDI Playback Enhancements
 
-The player now supports advanced MIDI processing for better performance with both live keyboard input and MIDI file playback:
+The player supports MIDI file processing for better in-game playback:
 
 ### Note Folding (Octave Shifting)
 - **Automatic octave wrapping**: Notes outside the instrument's range are shifted by full octaves (12 semitones) until they fit
 - **Preserves musical structure**: Deep bass notes become playable mid-range notes instead of being dropped
 - **Works with all instruments**: Piano, lute, violin, cello, etc. all benefit from this
-- **Applies to both**: MIDI file playback AND live keyboard input
-
-### Note Merging (Chord Cleaning) - Live Keyboard Only
-- **Chord buffering**: Notes arriving within a 20ms window are grouped as chords
-- **Simultaneous key presses**: All notes in a chord are pressed at the same time
-- **Cleaner timing**: Eliminates "stair-step" effect from slightly offset MIDI timing
-- **Automatic release**: Chords are released together after sustain period
-
-### How MIDI Input Works
-1. **For MIDI Files**: Notes are processed through octave folding to ensure all notes fit within the selected instrument's range
-2. **For Live Keyboard**: Connect a MIDI keyboard and play notes - they'll be processed through both folding and merging for optimal timing
-3. **Automatic Detection**: The player automatically detects and uses the first available MIDI input device
-
----
-
-## MIDI Input Enhancements (Live Keyboard)
-
-The player now supports advanced MIDI input processing for better live keyboard performance:
-
-### Note Folding (Octave Shifting)
-- **Automatic octave wrapping**: Notes outside the instrument's range are shifted by full octaves (12 semitones) until they fit
-- **Preserves musical structure**: Deep bass notes become playable mid-range notes instead of being dropped
-- **Works with all instruments**: Piano, lute, violin, cello, etc.
-
-### Note Merging (Chord Cleaning)  
-- **Chord buffering**: Notes arriving within a 20ms window are grouped as chords
-- **Simultaneous key presses**: All notes in a chord are pressed at the same time
-- **Cleaner timing**: Eliminates "stair-step" effect from slightly offset MIDI timing
-- **Automatic release**: Chords are released together after sustain period
-
-### How MIDI Input Works
-1. Connect a MIDI keyboard to your computer
-2. The player will automatically detect and use the first available MIDI input
-3. Play notes on your keyboard - they'll be mapped to Heartopia keys
-4. Notes are processed through folding/merging for optimal timing
-5. Use the instrument selector to change how notes are mapped
-
----
 
 ## Multi-Instrument Support
 
@@ -108,6 +70,7 @@ You can now select different instruments when playing MIDI files. Each instrumen
 * **Instant playback**: Removed 5-second delay, starts playing immediately
 * **Cello instrument**: Added with C2-C4 range and variable sustain (up to 5 seconds)
 * **Code cleanup**: Removed unused code and imports
+* **MIDI timing**: Leading silence is trimmed so playback starts with the first note
 
 ---
 
@@ -156,10 +119,8 @@ You can now select different instruments when playing MIDI files. Each instrumen
 * Packages (install via pip):
 
 ```bash
-pip install mido python-rtmidi keyboard
+pip install mido keyboard
 ```
-
-> `python-rtmidi` is required to use a physical MIDI keyboard.
 
 ---
 
@@ -184,18 +145,27 @@ pip install -r requirements.txt
 python main.py
 ```
 
+To build a Windows executable, run this from the project folder:
+
+```powershell
+python -m PyInstaller --clean --noconfirm main-current.spec
+```
+
+Each build automatically increments the patch version and creates a new executable in `dist`, such as `main-0.4.1.exe` and then `main-0.4.2.exe`. The app footer and Windows file version metadata are updated to match.
+
 4. **Using the app:**
 
 * **Load MIDI files:** Click `Load MIDI` and select `.mid` or `.midi` files.
 * **Delete:** Remove selected MIDI files from the playlist.
 * **Play Selected:** Plays the selected MIDI file (auto-focuses to Heartopia).
 * **Play Playlist:** Plays all MIDI files in order.
+* **Musical Chairs:** Continuously plays a random 20-25 second excerpt from random playlist songs (shorter songs play in full).
+	Each excerpt stops at its selected duration before the next song begins; no song-end buffer is added.
 * **Pause/Resume:** ⏸ pauses playback, press again to resume (switches windows accordingly).
 * **Stop:** ⏹ stops playback.
 * **Skip:** ⏮ ⏭ navigate through playlist.
 * **Instrument:** Choose from Piano, Lute, Wooden Bass, Recorder, Violin, or Cello.
 * **Layout:** Automatically configured based on selected instrument (15-key or 22-key).
-* **MIDI Keyboard:** Connect a MIDI keyboard and select it from the dropdown to play live.
 * **Loop:** 🔁 toggles loop mode (none/one/all).
 
 > The app will remember loaded MIDI files and your instrument selection between sessions.
@@ -208,6 +178,7 @@ python main.py
 * Instrument preferences are automatically saved in `layout.json`.
 * MIDI notes are automatically transposed to fit within each instrument's range.
 * Playback starts instantly and auto-focuses to Heartopia window.
+* Musical Chairs excerpts start immediately and are limited to 20-25 seconds.
 * Pause works mid-song and switches focus back to the player for control.
 * If you switch away from Heartopia during playback, it auto-pauses.
 
