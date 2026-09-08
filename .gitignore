@@ -1,0 +1,25 @@
+# Python cache and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# PyInstaller generated output
+build/
+dist/
+*.manifest
+*.pkg
+
+# Local app state
+layout.json
+playlist.json
+
+# Local song library and exports
+songs/
+
+# Editor and OS noise
+.idea/
+.vscode/
+*.log
+Thumbs.db
+Desktop.ini
