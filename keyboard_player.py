@@ -1,8 +1,5 @@
-import keyboard
-import threading
-import mido
-
 import ctypes
+from keyboard_layout import create_scan_code_note_map
 try:
     ctypes.windll.winmm.timeBeginPeriod(1)
 except Exception:
@@ -70,6 +67,8 @@ NOTE_TO_KEY_22 = {
     ("C", 6): "i",
 }
 
+NOTE_TO_KEY_22_US = create_scan_code_note_map(NOTE_TO_KEY_22)
+
 MIN_OCTAVE = 1
 MAX_OCTAVE = 7
 
@@ -90,15 +89,17 @@ class KeyboardPlayer:
         self.instrument = instrument
         
         if instrument == "piano":
-            self.note_map = NOTE_TO_KEY_22
+            self.note_map = NOTE_TO_KEY_22_US
         else:
             # Get instrument definition
             if instrument in INSTRUMENTS:
                 instr = INSTRUMENTS[instrument]
-                self.note_map = create_note_map_15(instr["start_octave"], instr["keys"])
+                self.note_map = create_scan_code_note_map(
+                    create_note_map_15(instr["start_octave"], instr["keys"])
+                )
             else:
-                # Fallback to piano
-                self.note_map = NOTE_TO_KEY_22
+                # Fallback to piano with US scan codes
+                self.note_map = NOTE_TO_KEY_22_US
 
     def stop(self):
         self.stop_flag = True
@@ -147,123 +148,3 @@ class KeyboardPlayer:
                 
             return self.note_map.get((name, octave))
 
-# MidiInputPlayer: live MIDI keyboard
-class MidiInputPlayer:
-    def __init__(self, layout="22", instrument="piano", note_to_key=None, on_key_press=None, transpose=0):
-        self.on_key_press = on_key_press
-        self.transpose = transpose
-        self.stop_flag = False
-        self.thread = None
-        self.instrument = instrument
-        
-        # Support both old and new initialization
-        if note_to_key is not None:
-            self.note_to_key = note_to_key
-        else:
-            if instrument == "piano":
-                self.note_to_key = NOTE_TO_KEY_22
-            else:
-                if instrument in INSTRUMENTS:
-                    instr = INSTRUMENTS[instrument]
-                    self.note_to_key = create_note_map_15(instr["start_octave"], instr["keys"])
-                else:
-                    self.note_to_key = NOTE_TO_KEY_22
-
-    def stop(self):
-        self.stop_flag = True
-
-    def start(self, port_name=None):
-        self.stop_flag = False
-        self.thread = threading.Thread(target=self.run, args=(port_name,), daemon=True)
-        self.thread.start()
-
-    def run(self, port_name):
-        try:
-            if port_name is None:
-                ports = mido.get_input_names()
-                if not ports:
-                    print("No MIDI input found.")
-                    return
-                port_name = ports[0]
-
-            chord_buffer = []
-            buffer_timeout = 0.020  # 20 milliseconds window for merging notes into chords
-            last_msg_time = 0
-            buffer_timer = None
-
-            def process_chord_buffer():
-                nonlocal chord_buffer, buffer_timer
-                if chord_buffer:
-                    # Press all keys in the chord simultaneously
-                    pressed_keys = []
-                    for midi_note in chord_buffer:
-                        key = self.get_playable_key(midi_note)
-                        if key:
-                            keyboard.press(key)
-                            pressed_keys.append(key)
-                    
-                    if pressed_keys and self.on_key_press:
-                        self.on_key_press(pressed_keys)
-                    
-                    # Release all keys after a short sustain
-                    def release_chord(keys):
-                        for key in keys:
-                            keyboard.release(key)
-                        if self.on_key_press:
-                            self.on_key_press([])
-                    
-                    # Schedule release after sustain time (adjust as needed)
-                    threading.Timer(0.1, release_chord, args=[pressed_keys]).start()
-                    
-                    chord_buffer.clear()
-                buffer_timer = None
-            # -------------------------------------------------------------
-
-            with mido.open_input(port_name) as inport:
-                for msg in inport:
-                    if self.stop_flag:
-                        break
-                    
-                    current_time = msg.time if hasattr(msg, 'time') else 0
-                    
-                    if msg.type == 'note_on' and msg.velocity > 0:
-                        # Add note to buffer
-                        chord_buffer.append(msg.note)
-                        
-                        # Start or reset the buffer timer
-                        if buffer_timer:
-                            buffer_timer.cancel()
-                        buffer_timer = threading.Timer(buffer_timeout, process_chord_buffer)
-                        buffer_timer.start()
-                        
-                        last_msg_time = current_time
-                        
-        except Exception as e:
-            print(f"MIDI input error: {e}")
-        finally:
-            # Clean up any remaining timer
-            if 'buffer_timer' in locals() and buffer_timer:
-                buffer_timer.cancel()
-
-    def get_playable_key(self, midi_note):
-        NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F",
-                      "F#", "G", "G#", "A", "A#", "B"]
-        midi_note += self.transpose
-        
-        # Find the min and max MIDI values your current instrument supports
-        supported_midi_values = [((oct + 1) * 12 + NOTE_NAMES.index(nm)) 
-                                 for (nm, oct) in self.note_to_key.keys()]
-        min_midi = min(supported_midi_values)
-        max_midi = max(supported_midi_values)
-
-        # Shift the note by full octaves (12 semitones) until it is within range
-        while midi_note < min_midi:
-            midi_note += 12
-        while midi_note > max_midi:
-            midi_note -= 12
-        # ----------------------------------------------------------
-        
-        name = NOTE_NAMES[midi_note % 12]
-        octave = midi_note // 12 - 1
-        
-        return self.note_to_key.get((name, octave))

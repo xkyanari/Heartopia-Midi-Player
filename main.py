@@ -1,89 +1,80 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 import os
-import json
-import mido
-import keyboard
-import ctypes
+import random
 
+from app_storage import (
+    load_layout_settings,
+    load_playlist_paths,
+    save_layout_settings,
+    save_playlist_paths,
+)
 from midi_parser import parse_midi
-from keyboard_player import KeyboardPlayer, MidiInputPlayer, INSTRUMENTS, note_to_midi_value
-
-# Paths
-PLAYLIST_FILE = "playlist.json"
-LAYOUT_FILE = "layout.json"
+from keyboard_player import KeyboardPlayer, INSTRUMENTS
+from keyboard_layout import press_key, release_key
+from window_focus import get_foreground_window_title, switch_to_heartopia, switch_to_window
+from app_config import (
+    APP_CREDIT,
+    APP_TITLE,
+    APP_VERSION,
+    BACKGROUND_COLOR,
+    BUTTON_COLOR,
+    DEFAULT_INSTRUMENT,
+    DEFAULT_LAYOUT,
+    DEFAULT_STATUS,
+    FILE_BUTTONS,
+    FOCUS_CHECK_INTERVAL_MS,
+    FOOTER_TEXT_COLOR,
+    HEARTOPIA_WINDOW_TITLES,
+    KEY_HOLD_MS,
+    MUSICAL_CHAIRS_MAX_SECONDS,
+    MUSICAL_CHAIRS_MIN_SECONDS,
+    MUTED_TEXT_COLOR,
+    PANEL_COLOR,
+    PAUSE_POLL_INTERVAL_MS,
+    PLAYBACK_BUTTONS,
+    PLAYBACK_SPEED,
+    PLAYBACK_START_DELAY_MS,
+    SELECTION_COLOR,
+    SEPARATOR_COLOR,
+    SONG_END_BUFFER_SECONDS,
+    TEXT_COLOR,
+    WINDOW_SIZE,
+)
 
 # App state
 player = None
-midi_input = None
 playlist = []
 current_index = None
-midi_mode = False
-current_layout = "22"
-current_instrument = "piano"  # Default instrument
+current_layout = DEFAULT_LAYOUT
+current_instrument = DEFAULT_INSTRUMENT
 loop_mode = "none"  # "none", "one", or "all"
 is_paused = False
-pause_time = 0.0
 focus_check_id = None
-
-def switch_to_heartopia():
-    """Switch focus to the Heartopia game window."""
-    try:
-        # Find the Heartopia window by title
-        hwnd = ctypes.windll.user32.FindWindowW(None, "Heartopia")
-        if hwnd:
-            # Bring it to foreground
-            ctypes.windll.user32.SetForegroundWindow(hwnd)
-            return True
-        else:
-            # Try alternative titles if needed
-            for title in ["Heartopia", "Heartopia.exe", "Heartopia Game"]:
-                hwnd = ctypes.windll.user32.FindWindowW(None, title)
-                if hwnd:
-                    ctypes.windll.user32.SetForegroundWindow(hwnd)
-                    return True
-            return False
-    except Exception:
-        return False
 
 def switch_to_player():
     """Switch focus to the MIDI player window."""
-    try:
-        hwnd = root.winfo_id()
-        ctypes.windll.user32.SetForegroundWindow(hwnd)
-    except Exception:
-        pass
-
-def get_foreground_window_title():
-    """Get the title of the currently foreground window."""
-    try:
-        hwnd = ctypes.windll.user32.GetForegroundWindow()
-        if hwnd:
-            buffer = ctypes.create_unicode_buffer(256)
-            ctypes.windll.user32.GetWindowTextW(hwnd, buffer, 256)
-            return buffer.value
-        return ""
-    except Exception:
-        return ""
+    switch_to_window(root.winfo_id())
 
 def check_heartopia_focus():
     """Check if Heartopia is still the active window, pause if not."""
     global focus_check_id
     if playback_active and not is_paused:
         title = get_foreground_window_title()
-        if "Heartopia" not in title:
+        if HEARTOPIA_WINDOW_TITLES[0] not in title:
             pause_resume()
     # Continue checking if still active
     if playback_active:
-        focus_check_id = root.after(500, check_heartopia_focus)
+        focus_check_id = root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
     else:
         focus_check_id = None
 
 # Tk setup
 root = tk.Tk()
-root.title("Heartopia MIDI Player")
-root.geometry("360x600")
-root.configure(bg="#1e1e1e")
+root.title(APP_TITLE)
+root.geometry(WINDOW_SIZE)
+root.minsize(300, 500)
+root.configure(bg=BACKGROUND_COLOR)
 
 # Helpers
 def set_status(text):
@@ -96,11 +87,8 @@ def highlight_keys(keys):
 # Playback control (no threads): scheduled via tkinter `after`
 playback_active = False
 playback_after_ids = []
-pressed_keys = set()
+pressed_keys = []
 playback_gen = 0
-KEY_HOLD_MS = 250  # Duration to hold each key (ms). Adjust if notes are missed or timing feels off.
-PLAYBACK_SPEED = 1.0  # Tempo multiplier: increase (1.5, 2.0) to slow down; decrease (0.8) to speed up.
-
 def cancel_playback():
     global playback_active, playback_after_ids, pressed_keys, focus_check_id
     playback_active = False
@@ -120,7 +108,7 @@ def cancel_playback():
         focus_check_id = None
     for k in list(pressed_keys):
         try:
-            keyboard.release(k)
+            release_key(k)
         except Exception:
             pass
     pressed_keys.clear()
@@ -129,7 +117,7 @@ def cancel_playback():
     except Exception:
         pass
 
-def start_playback(events, speed=1.0, on_key_press=None):
+def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
     """Play `events` (list of (delay, notes)) using tkinter `after` scheduling.
     This avoids background threads and can be cancelled with `cancel_playback()`.
     """
@@ -137,7 +125,7 @@ def start_playback(events, speed=1.0, on_key_press=None):
     cancel_playback()
     playback_active = True
     playback_after_ids = []
-    pressed_keys = set()
+    pressed_keys = []
     global playback_gen
     playback_gen += 1
     my_gen = playback_gen
@@ -145,10 +133,13 @@ def start_playback(events, speed=1.0, on_key_press=None):
     def release_keys(keys):
         for k in keys:
             try:
-                keyboard.release(k)
+                release_key(k)
             except Exception:
                 pass
-            pressed_keys.discard(k)
+            try:
+                pressed_keys.remove(k)
+            except ValueError:
+                pass
         if on_key_press:
             on_key_press([])
 
@@ -185,7 +176,7 @@ def start_playback(events, speed=1.0, on_key_press=None):
 
             # If paused, do not progress; keep checking until resumed.
             if is_paused:
-                rid = root.after(100, do_notes)
+                rid = root.after(PAUSE_POLL_INTERVAL_MS, do_notes)
                 playback_after_ids.append(rid)
                 return
 
@@ -198,8 +189,8 @@ def start_playback(events, speed=1.0, on_key_press=None):
 
                 active_press_keys.append(key)
                 try:
-                    keyboard.press(key)
-                    pressed_keys.add(key)
+                    press_key(key)
+                    pressed_keys.append(key)
                 except Exception:
                     pass
 
@@ -213,25 +204,46 @@ def start_playback(events, speed=1.0, on_key_press=None):
             if my_gen == playback_gen and playback_active:
                 play_note_index(i+1)
 
-        rid = root.after(int(delay * 1000 / PLAYBACK_SPEED), do_notes)
+        rid = root.after(int(delay * 1000 / speed), do_notes)
         playback_after_ids.append(rid)
 
-    # initial delay before playback (3s)
-    rid = root.after(5000, lambda: play_note_index(0))
+    rid = root.after(PLAYBACK_START_DELAY_MS, lambda: play_note_index(0))
     playback_after_ids.append(rid)
 
+def create_random_excerpt(events, duration):
+    """Return a random 20-25 second excerpt as relative-delay events."""
+    excerpt_duration = min(
+        duration,
+        random.uniform(MUSICAL_CHAIRS_MIN_SECONDS, MUSICAL_CHAIRS_MAX_SECONDS),
+    )
+    start_time = 0.0
+    if duration > excerpt_duration:
+        start_time = random.uniform(0.0, duration - excerpt_duration)
+    end_time = start_time + excerpt_duration
+
+    excerpt_events = []
+    absolute_time = 0.0
+    previous_time = start_time
+    for delay, notes in events:
+        absolute_time += delay
+        if start_time <= absolute_time <= end_time:
+            excerpt_events.append((absolute_time - previous_time, notes))
+            previous_time = absolute_time
+
+    return excerpt_events, excerpt_duration
+
 # Title
-title_frame = tk.Frame(root, bg="#1e1e1e")
+title_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
 title_frame.pack(pady=(10, 2))
 
-tk.Label(title_frame, text="Heartopia MIDI Player", fg="white",
-         bg="#1e1e1e", font=("Arial", 20, "bold")).pack()
-tk.Label(title_frame, text="by yukiokoito, modified by Kyanari", fg="#bbbbbb",
-         bg="#1e1e1e", font=("Arial", 10)).pack()
+tk.Label(title_frame, text=APP_TITLE, fg=TEXT_COLOR,
+         bg=BACKGROUND_COLOR, font=("Arial", 20, "bold")).pack()
+tk.Label(title_frame, text=APP_CREDIT, fg=MUTED_TEXT_COLOR,
+         bg=BACKGROUND_COLOR, font=("Arial", 10)).pack()
 
 # Playlist
-playlist_box = tk.Listbox(root, bg="#2e2e2e", fg="white",
-                          selectbackground="#555555", font=("Arial", 12))
+playlist_box = tk.Listbox(root, bg=PANEL_COLOR, fg=TEXT_COLOR,
+                          selectbackground=SELECTION_COLOR, font=("Arial", 12))
 playlist_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
 
 def on_playlist_select(event):
@@ -243,20 +255,16 @@ def on_playlist_select(event):
 playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
 
 # Status
-status_label = tk.Label(root, text="No files loaded", bg="#1e1e1e",
-                        fg="white", font=("Arial", 12))
+status_label = tk.Label(root, text=DEFAULT_STATUS, bg=BACKGROUND_COLOR,
+                        fg=TEXT_COLOR, font=("Arial", 12))
 status_label.pack(pady=(0, 10))
 
 # Playback controls
 def stop():
-    global midi_mode, is_paused
-    # Cancel scheduled playback and stop any player/input
+    global is_paused
     cancel_playback()
     if player:
         player.stop()
-    if midi_mode and midi_input:
-        midi_input.stop()
-    midi_mode = False
     is_paused = False
     set_status("Stopped")
 
@@ -287,9 +295,8 @@ def delete_selected():
     save_playlist()
 
 def play_selected():
-    global midi_mode, loop_mode
+    global loop_mode
     stop()
-    midi_mode = False
     if current_index is None:
         messagebox.showwarning("Play", "Select a MIDI file first")
         return
@@ -301,18 +308,17 @@ def play_selected():
     set_status(f"Playing: {playlist[current_index]['name']}")
     start_playback(events, on_key_press=highlight_keys)
     if switch_to_heartopia():  # Switch to Heartopia window for key presses
-        root.after(500, check_heartopia_focus)  # Start monitoring focus
+        root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
     
     # If loop one is enabled, schedule replay after song ends
     if loop_mode == "one":
-        wait_time = int((duration + 6) * 1000)
+        wait_time = int((duration + SONG_END_BUFFER_SECONDS) * 1000)
         aid = root.after(wait_time, lambda: play_selected())
         playback_after_ids.append(aid)
 
 def play_playlist():
-    global midi_mode, loop_mode
+    global loop_mode
     stop()
-    midi_mode = False
     def play_next(idx):
         if idx >= len(playlist):
             if loop_mode == "all":
@@ -333,12 +339,58 @@ def play_playlist():
         set_status(f"Playing: {playlist[idx]['name']}")
         start_playback(events, on_key_press=highlight_keys)
         if switch_to_heartopia():  # Switch to Heartopia window for key presses
-            root.after(500, check_heartopia_focus)  # Start monitoring focus
+            root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
         # Schedule next song with duration + 6 second buffer
-        wait_time = int((duration + 6) * 1000)
+        wait_time = int((duration + SONG_END_BUFFER_SECONDS) * 1000)
         aid = root.after(wait_time, lambda: play_next(idx+1))
         playback_after_ids.append(aid)
     play_next(current_index or 0)
+
+def play_musical_chairs():
+    """Play bounded excerpts from random playlist songs in a continuous cycle."""
+    global current_index
+    stop()
+    if not playlist:
+        messagebox.showwarning("Musical Chairs", "Load at least one MIDI file first")
+        return
+
+    previous_index = None
+
+    def play_next_excerpt():
+        nonlocal previous_index
+        global current_index
+        if not playlist or (not playback_active and previous_index is not None):
+            return
+        if is_paused:
+            aid = root.after(PAUSE_POLL_INTERVAL_MS, play_next_excerpt)
+            playback_after_ids.append(aid)
+            return
+        cancel_playback()
+
+        choices = [idx for idx in range(len(playlist)) if idx != previous_index]
+        current_index = random.choice(choices or list(range(len(playlist))))
+        previous_index = current_index
+        playlist_box.select_clear(0, tk.END)
+        playlist_box.select_set(current_index)
+        playlist_box.activate(current_index)
+
+        try:
+            events, duration = parse_midi(playlist[current_index]["path"])
+        except Exception as e:
+            messagebox.showerror("MIDI Error", str(e))
+            return
+
+        excerpt_events, excerpt_duration = create_random_excerpt(events, duration)
+        set_status(f"Chairs: {playlist[current_index]['name']}")
+        start_playback(excerpt_events, on_key_press=highlight_keys)
+        if switch_to_heartopia():
+            root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
+
+        wait_time = int(excerpt_duration * 1000) + PLAYBACK_START_DELAY_MS
+        aid = root.after(wait_time, play_next_excerpt)
+        playback_after_ids.append(aid)
+
+    play_next_excerpt()
 
 def pause_resume():
     global is_paused
@@ -412,29 +464,19 @@ def toggle_loop():
         loop_mode = "none"
         set_status("Loop: Off")
 
-# MIDI keyboard
-device_frame = tk.Frame(root, bg="#1e1e1e")
-device_frame.pack(pady=5, padx=10, fill=tk.X)
-
-tk.Label(device_frame, text="MIDI Device:", bg="#1e1e1e", fg="white").pack(anchor="w")
-
-midi_device_var = tk.StringVar()
-device_box = ttk.Combobox(device_frame, textvariable=midi_device_var, width=35)
-device_box.pack(fill=tk.X, pady=(2, 5))
-
 # Instrument selection
-instrument_frame = tk.Frame(root, bg="#1e1e1e")
+instrument_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
 instrument_frame.pack(pady=5, padx=10, fill=tk.X)
 
-tk.Label(instrument_frame, text="Instrument:", bg="#1e1e1e", fg="white").pack(anchor="w")
+tk.Label(instrument_frame, text="Instrument:", bg=BACKGROUND_COLOR, fg=TEXT_COLOR).pack(anchor="w")
 
-instrument_var = tk.StringVar(value="piano")
+instrument_var = tk.StringVar(value=DEFAULT_INSTRUMENT)
 instrument_box = ttk.Combobox(instrument_frame, textvariable=instrument_var, width=35, 
                                values=list(INSTRUMENTS.keys()), state="readonly")
 instrument_box.pack(fill=tk.X, pady=(2, 5))
 
 def on_instrument_change(event=None):
-    global current_instrument, player, midi_input
+    global current_instrument, player
     current_instrument = instrument_var.get()
     if player:
         player.instrument = current_instrument
@@ -444,114 +486,76 @@ def on_instrument_change(event=None):
 
 instrument_box.bind("<<ComboboxSelected>>", on_instrument_change)
 
-def refresh_devices():
-    try:
-        ports = mido.get_input_names()
-    except Exception:
-        ports = []
-    if not ports:
-        ports = ["No MIDI devices"]
-    device_box["values"] = ports
-    midi_device_var.set(ports[0])
-
-def start_midi_keyboard():
-    global midi_input, midi_mode
-    stop()
-    midi_mode = True
-    port = midi_device_var.get()
-    if not port or port == "No MIDI devices":
-        messagebox.showerror("MIDI", "No MIDI device available")
-        return
-    midi_input = MidiInputPlayer(layout=current_layout, instrument=current_instrument)
-    midi_input.start(port)
-    set_status(f"MIDI Keyboard: {port}")
-
-refresh_devices()
-
 # Buttons
-btn_frame = tk.Frame(root, bg="#1e1e1e")
+btn_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
 btn_frame.pack(pady=5)
 
 file_buttons = [
-    ("📁 Load MIDI", load_midi),
-    ("🗑 Delete", delete_selected),
-    ("🎹 Keyboard", start_midi_keyboard),
+    (FILE_BUTTONS["load_midi"], load_midi),
+    (FILE_BUTTONS["delete_selected"], delete_selected),
 ]
 
 for i, (text, cmd) in enumerate(file_buttons):
-    tk.Button(btn_frame, text=text, command=cmd, bg="#333333", fg="white", width=14).grid(row=0, column=i, padx=4, pady=3)
+    tk.Button(btn_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=14).grid(row=0, column=i, padx=4, pady=3)
 
 # Playback controls frame
-playback_frame = tk.Frame(root, bg="#1e1e1e")
+playback_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
 playback_frame.pack(pady=5)
 
 playback_buttons = [
-    ("⏮", skip_previous),
-    ("▶", play_selected),
-    ("▶▶", play_playlist),
-    ("⏸", pause_resume),
-    ("⏹", stop),
-    ("⏭", skip_next)
+    (PLAYBACK_BUTTONS["previous"], skip_previous),
+    (PLAYBACK_BUTTONS["play_selected"], play_selected),
+    (PLAYBACK_BUTTONS["play_playlist"], play_playlist),
+    (PLAYBACK_BUTTONS["pause_resume"], pause_resume),
+    (PLAYBACK_BUTTONS["stop"], stop),
+    (PLAYBACK_BUTTONS["next"], skip_next),
 ]
 
 for i, (text, cmd) in enumerate(playback_buttons):
-    tk.Button(playback_frame, text=text, command=cmd, bg="#333333", fg="white", width=6).grid(row=0, column=i, padx=2, pady=3)
+    tk.Button(playback_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
 
 # Loop controls frame
-loop_frame = tk.Frame(root, bg="#1e1e1e")
+loop_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
 loop_frame.pack(pady=5)
 
 loop_buttons = [
-    ("🔁", toggle_loop)
+    (PLAYBACK_BUTTONS["loop"], toggle_loop)
 ]
 
 for i, (text, cmd) in enumerate(loop_buttons):
-    tk.Button(loop_frame, text=text, command=cmd, bg="#333333", fg="white", width=6).grid(row=0, column=i, padx=2, pady=3)
+    tk.Button(loop_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
+
+tk.Button(loop_frame, text=PLAYBACK_BUTTONS["musical_chairs"], command=play_musical_chairs,
+          bg=BUTTON_COLOR, fg=TEXT_COLOR, width=14).grid(row=0, column=1, padx=2, pady=3)
 
 # Footer
-tk.Frame(root, bg="#444444", height=1).pack(fill=tk.X, pady=10)
+tk.Frame(root, bg=SEPARATOR_COLOR, height=1).pack(fill=tk.X, pady=10)
 
-footer = tk.Frame(root, bg="#1e1e1e")
+footer = tk.Frame(root, bg=BACKGROUND_COLOR)
 footer.pack(fill=tk.X, padx=10)
 
-tk.Label(footer, text="v0.2.0", fg="#aaaaaa", bg="#1e1e1e").pack(side=tk.LEFT)
+tk.Label(footer, text=APP_VERSION, fg=FOOTER_TEXT_COLOR, bg=BACKGROUND_COLOR).pack(side=tk.LEFT)
 # tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),
 #           bg="#333333", fg="white").pack(side=tk.RIGHT)
 
 # Saving songs
 def save_playlist():
-    with open(PLAYLIST_FILE, "w") as f:
-        json.dump([p["path"] for p in playlist], f)
+    save_playlist_paths([p["path"] for p in playlist])
 
 def load_saved_playlist():
-    if os.path.exists(PLAYLIST_FILE):
-        try:
-            with open(PLAYLIST_FILE, "r") as f:
-                paths = json.load(f)
-            for path in paths:
-                if os.path.exists(path):
-                    playlist.append({"name": os.path.basename(path), "path": path})
-                    playlist_box.insert(tk.END, os.path.basename(path))
-            if playlist:
-                set_status(f"{len(playlist)} files loaded")
-        except Exception:
-            pass
+    for path in load_playlist_paths():
+        playlist.append({"name": os.path.basename(path), "path": path})
+        playlist_box.insert(tk.END, os.path.basename(path))
+    if playlist:
+        set_status(f"{len(playlist)} files loaded")
 
 def save_layout():
-    with open(LAYOUT_FILE, "w") as f:
-        json.dump({"layout": current_layout, "instrument": current_instrument}, f)
+    save_layout_settings(current_layout, current_instrument)
 
 def load_layout():
     global current_layout, current_instrument
-    if os.path.exists(LAYOUT_FILE):
-        try:
-            with open(LAYOUT_FILE, "r") as f:
-                data = json.load(f)
-                current_layout = data.get("layout", "22")
-                current_instrument = data.get("instrument", "piano")
-                instrument_var.set(current_instrument)
-        except Exception:
-            pass
+    current_layout, current_instrument = load_layout_settings()
+    instrument_var.set(current_instrument)
 
 def save_instrument():
     save_layout()  # Save both layout and instrument together

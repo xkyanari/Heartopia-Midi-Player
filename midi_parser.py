@@ -46,9 +46,11 @@ def parse_midi(path: str):
         duration_ms = int((end_time - start_time) * 1000)
         event_notes[start_time].append((name, octave, duration_ms))
 
-    last_time = 0.0
-    for t in sorted(event_notes.keys()):
-        delay = t - last_time
+    sorted_event_times = sorted(event_notes.keys())
+    last_time = sorted_event_times[0] if sorted_event_times else 0.0
+    for index, t in enumerate(sorted_event_times):
+        # Start at the first note instead of playing leading MIDI silence.
+        delay = 0.0 if index == 0 else t - last_time
         events.append((delay, event_notes[t]))
         last_time = t
 
