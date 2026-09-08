@@ -8,7 +8,7 @@ All notable changes to Heartopia MIDI Player are documented here.
 - Added Musical Chairs playback with a random 15-25 second excerpt from one playlist song.
 - Added automatic executable versioning for PyInstaller builds.
 - Added Windows executable version metadata and synchronized UI version display.
-- Added a 300x500 minimum window size and responsive wrapping for active song status text.
+- Added a 350x500 minimum window size and responsive wrapping for active song status text.
 
 ### Changed
 - Removed the playback startup delay so songs begin immediately.

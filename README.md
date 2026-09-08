@@ -17,7 +17,7 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 * Supports **15-key** and **22-key** layouts
 * Playlist persistence (remembers loaded MIDI files and instrument selection between sessions)
 * Simple GUI with playback controls
-* **Musical Chairs mode**: randomly plays bounded 20-25 second excerpts from random songs, then switches without an end buffer
+* **Musical Chairs mode**: randomly plays one bounded 15-25 second excerpt, then stops without an end buffer
 * **Auto-focus** to Heartopia window on play
 * **Auto-pause** when switching away from Heartopia
 * **Window switching** on pause/resume for seamless control
@@ -159,8 +159,7 @@ Each build automatically increments the patch version and creates a new executab
 * **Delete:** Remove selected MIDI files from the playlist.
 * **Play Selected:** Plays the selected MIDI file (auto-focuses to Heartopia).
 * **Play Playlist:** Plays all MIDI files in order.
-* **Musical Chairs:** Continuously plays a random 20-25 second excerpt from random playlist songs (shorter songs play in full).
-	Each excerpt stops at its selected duration before the next song begins; no song-end buffer is added.
+* **Musical Chairs:** Plays one random 15-25 second excerpt from a playlist song (shorter songs play in full), then stops. No song-end buffer is added.
 * **Pause/Resume:** ⏸ pauses playback, press again to resume (switches windows accordingly).
 * **Stop:** ⏹ stops playback.
 * **Skip:** ⏮ ⏭ navigate through playlist.
@@ -178,7 +177,7 @@ Each build automatically increments the patch version and creates a new executab
 * Instrument preferences are automatically saved in `layout.json`.
 * MIDI notes are automatically transposed to fit within each instrument's range.
 * Playback starts instantly and auto-focuses to Heartopia window.
-* Musical Chairs excerpts start immediately and are limited to 20-25 seconds.
+* Musical Chairs excerpts start immediately, are limited to 15-25 seconds, and stop after one song.
 * Pause works mid-song and switches focus back to the player for control.
 * If you switch away from Heartopia during playback, it auto-pauses.
 

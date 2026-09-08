@@ -73,7 +73,7 @@ def check_heartopia_focus():
 root = tk.Tk()
 root.title(APP_TITLE)
 root.geometry(WINDOW_SIZE)
-root.minsize(300, 500)
+root.minsize(350, 500)
 root.configure(bg=BACKGROUND_COLOR)
 
 # Helpers
@@ -89,6 +89,7 @@ playback_active = False
 playback_after_ids = []
 pressed_keys = []
 playback_gen = 0
+musical_chairs_run_id = 0
 def cancel_playback():
     global playback_active, playback_after_ids, pressed_keys, focus_check_id
     playback_active = False
@@ -256,12 +257,19 @@ playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
 
 # Status
 status_label = tk.Label(root, text=DEFAULT_STATUS, bg=BACKGROUND_COLOR,
-                        fg=TEXT_COLOR, font=("Arial", 12))
+                        fg=TEXT_COLOR, font=("Arial", 12), justify=tk.CENTER)
 status_label.pack(pady=(0, 10))
+
+def update_status_wrap(event=None):
+    width = event.width if event else root.winfo_width()
+    status_label.config(wraplength=max(240, width - 20))
+
+root.bind("<Configure>", update_status_wrap)
 
 # Playback controls
 def stop():
-    global is_paused
+    global is_paused, musical_chairs_run_id
+    musical_chairs_run_id += 1
     cancel_playback()
     if player:
         player.stop()
@@ -347,29 +355,26 @@ def play_playlist():
     play_next(current_index or 0)
 
 def play_musical_chairs():
-    """Play bounded excerpts from random playlist songs in a continuous cycle."""
-    global current_index
+    """Play one bounded excerpt from one random playlist song."""
+    global current_index, musical_chairs_run_id
     stop()
+    musical_chairs_run_id += 1
+    run_id = musical_chairs_run_id
     if not playlist:
         messagebox.showwarning("Musical Chairs", "Load at least one MIDI file first")
         return
 
-    previous_index = None
-
-    def play_next_excerpt():
-        nonlocal previous_index
+    def play_excerpt():
         global current_index
-        if not playlist or (not playback_active and previous_index is not None):
+        if run_id != musical_chairs_run_id or not playlist:
             return
         if is_paused:
-            aid = root.after(PAUSE_POLL_INTERVAL_MS, play_next_excerpt)
+            aid = root.after(PAUSE_POLL_INTERVAL_MS, play_excerpt)
             playback_after_ids.append(aid)
             return
         cancel_playback()
 
-        choices = [idx for idx in range(len(playlist)) if idx != previous_index]
-        current_index = random.choice(choices or list(range(len(playlist))))
-        previous_index = current_index
+        current_index = random.randrange(len(playlist))
         playlist_box.select_clear(0, tk.END)
         playlist_box.select_set(current_index)
         playlist_box.activate(current_index)
@@ -381,16 +386,21 @@ def play_musical_chairs():
             return
 
         excerpt_events, excerpt_duration = create_random_excerpt(events, duration)
-        set_status(f"Chairs: {playlist[current_index]['name']}")
+        set_status(f"Playing: {playlist[current_index]['name']}")
         start_playback(excerpt_events, on_key_press=highlight_keys)
         if switch_to_heartopia():
             root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
 
         wait_time = int(excerpt_duration * 1000) + PLAYBACK_START_DELAY_MS
-        aid = root.after(wait_time, play_next_excerpt)
+        def finish_musical_chairs():
+            if run_id == musical_chairs_run_id:
+                cancel_playback()
+                set_status("Musical Chairs finished")
+
+        aid = root.after(wait_time, finish_musical_chairs)
         playback_after_ids.append(aid)
 
-    play_next_excerpt()
+    play_excerpt()
 
 def pause_resume():
     global is_paused
