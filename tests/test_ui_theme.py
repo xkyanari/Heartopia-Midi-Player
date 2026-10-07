@@ -2,7 +2,8 @@
 import tkinter as tk
 from tkinter import ttk
 import unittest
-from unittest.mock import Mock
+from contextlib import ExitStack
+from unittest.mock import Mock, patch
 
 import app_config as config
 from ui_theme import button, style_combobox
@@ -24,6 +25,8 @@ class ThemeTests(unittest.TestCase):
             with self.subTest(accent=accent):
                 command = Mock()
                 widget = button(self.root, "Play", command, accent=accent)
+                self.assertEqual(widget.cget("foreground"), config.ACCENT_TEXT_COLOR
+                                 if accent else config.BUTTON_TEXT_COLOR)
                 widget.pack()
                 self.root.update()
                 widget.event_generate("<Leave>")
@@ -63,3 +66,55 @@ class ThemeTests(unittest.TestCase):
         self.assertEqual(self.root.tk.call(listbox, "cget", "-foreground"), config.TEXT_COLOR)
         self.assertEqual(self.root.tk.call(listbox, "cget", "-selectbackground"),
                          config.SELECTION_COLOR)
+
+    def test_compact_player_fits_and_keeps_transport_commands(self):
+        import main
+
+        # Build the actual window without starting services or reading user state.
+        commands = ("skip_previous", "play_selected", "play_playlist",
+                    "pause_resume", "stop", "skip_next", "toggle_loop",
+                    "play_musical_chairs", "load_midi", "delete_selected")
+        with ExitStack() as patches:
+            patches.enter_context(patch("main.tk.Tk", return_value=self.root))
+            patches.enter_context(patch.object(self.root, "mainloop"))
+            patches.enter_context(patch("conversion_ui.ConversionUI"))
+            for name in ("load_layout", "load_saved_playlist", "KeyboardPlayer"):
+                patches.enter_context(patch.object(main, name))
+            callbacks = {name: patches.enter_context(patch.object(main, name))
+                         for name in commands}
+            main.main()
+            self.assertEqual(main.status_label.cget("background"), config.PANEL_COLOR)
+            main.set_status("Playing: example.mid")
+            self.assertEqual(main.status_label.cget("text"), "Playing: example.mid")
+
+            def descendants(widget):
+                for child in widget.winfo_children():
+                    yield child
+                    yield from descendants(child)
+
+            widgets = list(descendants(self.root))
+            buttons = {widget.cget("text"): widget for widget in widgets
+                       if isinstance(widget, tk.Button)}
+            labels = {**config.PLAYBACK_BUTTONS, **config.FILE_BUTTONS}
+            for name, callback in callbacks.items():
+                key = {"skip_previous": "previous", "skip_next": "next",
+                       "toggle_loop": "loop", "play_musical_chairs": "musical_chairs"}.get(name, name)
+                buttons[labels[key]].invoke()
+                callback.assert_called_once_with()
+            main.conversion_ui.attach_button.assert_called_once_with(
+                buttons[config.FILE_BUTTONS["convert_audio"]])
+
+            # Check every visible control stays inside the compact window and
+            # the expanding playlist remains usable at both supported sizes.
+            for size in (config.WINDOW_SIZE, "640x600"):
+                self.root.geometry(size)
+                self.root.update()
+                for widget in widgets:
+                    with self.subTest(size=size, widget=str(widget)):
+                        x = widget.winfo_rootx() - self.root.winfo_rootx()
+                        y = widget.winfo_rooty() - self.root.winfo_rooty()
+                        self.assertGreaterEqual(x, 0)
+                        self.assertGreaterEqual(y, 0)
+                        self.assertLessEqual(x + widget.winfo_width(), self.root.winfo_width())
+                        self.assertLessEqual(y + widget.winfo_height(), self.root.winfo_height())
+                self.assertGreaterEqual(main.playlist_box.winfo_height(), 60)

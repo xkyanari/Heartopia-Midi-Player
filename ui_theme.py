@@ -6,15 +6,15 @@ import app_config as config
 
 
 def button(parent, text, command, *, accent=False, **options):
-    """Build a flat button whose hover feedback respects disabled state."""
+    """Build a compact beveled button with disabled-aware hover feedback."""
     background = config.ACCENT_COLOR if accent else config.BUTTON_COLOR
     hover = config.ACCENT_HOVER_COLOR if accent else config.HOVER_COLOR
-    foreground = config.ACCENT_TEXT_COLOR if accent else config.TEXT_COLOR
+    foreground = config.ACCENT_TEXT_COLOR if accent else config.BUTTON_TEXT_COLOR
     widget = tk.Button(
         parent, text=text, command=command, bg=background, fg=foreground,
         activebackground=hover, activeforeground=foreground,
-        disabledforeground=config.FOOTER_TEXT_COLOR, relief=tk.FLAT, bd=0,
-        highlightthickness=0, padx=8, pady=8, cursor="hand2",
+        disabledforeground="#626779", relief=tk.RAISED, bd=2,
+        highlightthickness=0, padx=5, pady=3, cursor="hand2",
         font=options.pop("font", config.UI_FONT), **options,
     )
 
@@ -45,9 +45,9 @@ def style_combobox(root):
     style.configure(
         "Player.TCombobox", fieldbackground=config.PANEL_COLOR,
         background=config.BUTTON_COLOR, foreground=config.TEXT_COLOR,
-        arrowcolor=config.ACCENT_COLOR, bordercolor=config.SEPARATOR_COLOR,
+        arrowcolor=config.BUTTON_TEXT_COLOR, bordercolor=config.SEPARATOR_COLOR,
         lightcolor=config.PANEL_COLOR, darkcolor=config.PANEL_COLOR,
-        padding=7, font=config.UI_FONT,
+        padding=3, font=config.UI_FONT,
     )
     style.map(
         "Player.TCombobox",
