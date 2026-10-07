@@ -278,6 +278,8 @@ class IntegrationTests(unittest.TestCase):
         fallback.mkdir()
         (self.folder / "name.wav").touch()
         (fallback / "name (1).mid").touch()
+        from conversion_files import record_fallback_output
+        record_fallback_output(fallback / "name (1).mid", self.folder / "name.wav")
         service = self.start_service()
         self.event(service, "initialized")
         service.scan(self.folder, "fallback", fallback_dir=fallback)

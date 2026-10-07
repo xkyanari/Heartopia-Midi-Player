@@ -10,7 +10,7 @@ import threading
 
 import app_config as config
 from app_storage import load_settings, save_settings
-from conversion_files import app_data_dir, cleanup_stale
+from conversion_files import app_data_dir, cleanup_stale, fallback_sources
 from conversion_job import ConversionJob
 
 
@@ -53,11 +53,14 @@ def scan_audio_folder(folder, fallback_dir=None):
             rows.append({"path": str(path.resolve()), "name": entry.name, "size": metadata.st_size,
                          "modified": metadata.st_mtime})
     fallback = Path(fallback_dir) if fallback_dir else app_data_dir() / config.CONVERTED_OUTPUT_FOLDER
-    if os.path.normcase(os.path.abspath(fallback)) != os.path.normcase(os.path.abspath(folder)):
+    source_folder = os.path.normcase(os.path.abspath(folder))
+    if os.path.normcase(os.path.abspath(fallback)) != source_folder:
+        sources = fallback_sources(fallback)
         try:
             with os.scandir(fallback) as entries:
                 for entry in entries:
-                    record_midi(entry)
+                    if sources.get(entry.name.casefold()) == source_folder:
+                        record_midi(entry)
         except OSError:
             pass  # The fallback may not exist yet or may be temporarily unavailable.
     for row in rows:
