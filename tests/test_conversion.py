@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 import multiprocessing
 import os
@@ -130,6 +131,126 @@ def stalled_download_worker(request, messages):
     files.registered_temp(request["source"], request["job_id"])
     messages.put({"type": "stage", "stage": "downloading", "started": time.monotonic(), "timeout": .1})
     time.sleep(30)
+
+
+class CheckpointTests(unittest.TestCase):
+    """Checkpoint safety needs no conversion libraries or network access."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.folder = Path(directory.name)
+        for context in (
+            patch.dict(os.environ, {"LOCALAPPDATA": directory.name}),
+            patch.object(files, "process_identity", return_value={"pid": os.getpid(), "start_time": 1}),
+            patch.object(converter.urllib.request, "urlopen", side_effect=lambda *a, **k: io.BytesIO(b"model")),
+            patch.object(converter, "load_model", return_value="model-object"),
+        ):
+            context.start()
+            self.addCleanup(context.stop)
+
+    def checkpoint(self, name=None, owned=True):
+        target = converter.default_checkpoint()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if name:
+            target = target.with_name(name)
+        target.write_bytes(b"old")
+        if owned:
+            converter._record_checkpoint_owner(target)
+        return target
+
+    def test_first_download_uses_default_name_and_registers_owner(self):
+        _, path = converter.prepare_model("first", allow_download=True)
+        target = converter.default_checkpoint()
+        self.assertEqual(Path(path), target)
+        self.assertEqual(target.read_bytes(), b"model")
+        self.assertIsNotNone(converter._owned_checkpoint_identity(target))
+        self.assertEqual(list(target.parent.glob("*.pth")), [target])
+        self.assertEqual(files._read_registry(), {})
+
+    def test_redownload_replaces_owned_default_and_cleans_owned_leftovers(self):
+        target = self.checkpoint()
+        old = self.checkpoint(f"piano-{'a' * 32}.pth")
+        def validate(path):
+            self.assertEqual(target.read_bytes(), b"old")
+            self.assertEqual(Path(path).read_bytes(), b"model")
+            self.assertIn(str(Path(path).resolve()), files._read_registry())
+            return "model-object"
+        with patch.object(converter, "load_model", side_effect=validate):
+            for _ in range(2):
+                _, path = converter.prepare_model("replace", str(target), True, force_download=True)
+                self.assertEqual(Path(path), target)
+                self.assertEqual(target.read_bytes(), b"model")
+                self.assertIsNotNone(converter._owned_checkpoint_identity(target))
+                self.assertEqual(list(target.parent.glob("*.pth")), [target])
+                target.write_bytes(b"old")
+        self.assertFalse(converter._checkpoint_marker(old).exists())
+        self.assertEqual(files._read_registry(), {})
+
+    def test_redownload_preserves_unowned_and_mismatched_files(self):
+        target = self.checkpoint(owned=False)
+        unowned = self.checkpoint(f"piano-{'b' * 32}.pth", owned=False)
+        mismatch = self.checkpoint(f"piano-{'c' * 32}.pth")
+        converter._checkpoint_marker(mismatch).write_text('{}', encoding="utf-8")
+        _, path = converter.prepare_model("unowned", str(target), True, force_download=True)
+        self.assertNotEqual(Path(path), target)
+        for original in (target, unowned, mismatch):
+            self.assertEqual(original.read_bytes(), b"old")
+        self.assertIsNotNone(converter._owned_checkpoint_identity(path))
+
+    def test_failed_redownload_keeps_previous_model_and_cleans_temp(self):
+        target = self.checkpoint()
+        with patch.object(converter, "load_model", side_effect=ValueError("bad model")):
+            with self.assertRaises(converter.ConversionError):
+                converter.prepare_model("bad", str(target), True, force_download=True)
+        self.assertEqual(target.read_bytes(), b"old")
+        self.assertIsNotNone(converter._owned_checkpoint_identity(target))
+        self.assertEqual(list(target.parent.glob("*.pth")), [target])
+        self.assertEqual(files._read_registry(), {})
+        self.assertEqual(list(target.parent.glob("*.part")), [])
+
+    def test_replacement_rechecks_ownership_after_model_validation(self):
+        target = self.checkpoint()
+        def validate(path):
+            converter._checkpoint_marker(target).write_text('{}', encoding="utf-8")
+            return "model-object"
+        with patch.object(converter, "load_model", side_effect=validate):
+            _, path = converter.prepare_model("changed-owner", allow_download=True, force_download=True)
+        self.assertNotEqual(Path(path), target)
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_saved_owned_corrupt_checkpoint_is_removed(self):
+        for name in (None, f"piano-{'d' * 32}.pth"):
+            with self.subTest(name=name):
+                target = self.checkpoint(name)
+                with patch.object(converter, "load_model", side_effect=ValueError("bad model")):
+                    with self.assertRaisesRegex(converter.ConversionError, "removed.*Download it again"):
+                        converter.prepare_model("saved", str(target))
+                self.assertFalse(target.exists())
+                self.assertFalse(converter._checkpoint_marker(target).exists())
+
+    def test_selected_corrupt_files_without_app_ownership_are_kept(self):
+        unowned = self.checkpoint(owned=False)
+        outside = self.folder / "chosen.pth"
+        outside.write_bytes(b"user")
+        converter._record_checkpoint_owner(outside)
+        mismatch = self.checkpoint(f"piano-{'e' * 32}.pth")
+        converter._checkpoint_marker(mismatch).write_text('{}', encoding="utf-8")
+        with patch.object(converter, "load_model", side_effect=ValueError("bad model")):
+            for target in (unowned, outside, mismatch):
+                with self.subTest(target=target), self.assertRaisesRegex(converter.ConversionError, "original file was kept"):
+                    converter.prepare_model("chosen", str(target))
+                self.assertTrue(target.exists())
+
+    def test_checksum_rejects_same_size_corruption(self):
+        target = self.checkpoint()
+        with patch.object(converter, "CHECKPOINT_EXPECTED_BYTES", 3), \
+             patch.object(converter, "CHECKPOINT_MIN_BYTES", 3), \
+             patch.object(converter, "CHECKPOINT_SHA256", hashlib.sha256(b"old").hexdigest()):
+            converter._validate_checkpoint(target)
+            target.write_bytes(b"bad")
+            with self.assertRaisesRegex(converter.ConversionError, "checksum"):
+                converter._validate_checkpoint(target)
 
 
 class ConversionTests(unittest.TestCase):
