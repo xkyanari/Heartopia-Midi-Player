@@ -12,6 +12,80 @@ import wave
 import audio_converter as converter
 import conversion_files as files
 from conversion_job import ConversionJob
+from conversion_service import scan_audio_folder
+
+
+class OutputFolderTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.folder = Path(directory.name)
+        self.fallback = self.folder / "fallback"
+
+    def test_generic_oserror_uses_fallback(self):
+        temporary = self.fallback / "output.part"
+        with patch.object(converter, "registered_temp", side_effect=[OSError("disk full"), temporary]) as register:
+            self.assertEqual(converter.output_temporary(self.folder / "name.wav", "job", self.fallback), temporary)
+        self.assertTrue(self.fallback.is_dir())
+        self.assertEqual(register.call_args_list[0].args, (self.folder, "job"))
+        self.assertEqual(register.call_args_list[1].args, (self.fallback, "job"))
+
+    def test_non_oserror_propagates_without_fallback(self):
+        with patch.object(converter, "registered_temp", side_effect=ValueError("invalid registry")) as register:
+            with self.assertRaisesRegex(ValueError, "invalid registry"):
+                converter.output_temporary(self.folder / "name.wav", "job", self.fallback)
+        register.assert_called_once()
+        self.assertFalse(self.fallback.exists())
+
+    def test_both_output_folders_fail_with_existing_message(self):
+        with patch.object(converter, "registered_temp", side_effect=[OSError("disk full"), OSError("share unavailable")]):
+            with self.assertRaisesRegex(converter.ConversionError,
+                                        "Cannot write MIDI beside the source or in the fallback folder: share unavailable"):
+                converter.output_temporary(self.folder / "name.wav", "job", self.fallback)
+
+    def test_scan_detects_exact_numbered_and_fallback_midi_case_insensitively(self):
+        self.fallback.mkdir()
+        for name in ("exact.wav", "numbered.mp3", "saved.flac", "saved copy.ogg", "name.wav"):
+            (self.folder / name).touch()
+        for name in ("EXACT.MID", "NUMBERED (1).mid", "name2.mid", "name (0).mid", "name (-1).mid",
+                     "name (x).mid", "name (1) extra.mid"):
+            (self.folder / name).touch()
+        (self.folder / "name (2).mid").mkdir()
+        (self.fallback / "SAVED.mid").touch()
+        (self.fallback / "SAVED COPY (12).MID").touch()
+        with patch("conversion_service.os.scandir", wraps=os.scandir) as scan:
+            rows = scan_audio_folder(self.folder, self.fallback)
+        self.assertEqual(scan.call_count, 2)
+        self.assertEqual({row["name"]: row["midi"] for row in rows},
+                         {"exact.wav": True, "numbered.mp3": True, "saved.flac": True,
+                          "saved copy.ogg": True, "name.wav": False})
+
+    def test_scan_uses_default_fallback(self):
+        fallback = self.folder / converter.CONVERTED_OUTPUT_FOLDER
+        fallback.mkdir()
+        (self.folder / "name.wav").touch()
+        (fallback / "name (1).mid").touch()
+        with patch("conversion_service.app_data_dir", return_value=self.folder):
+            self.assertTrue(scan_audio_folder(self.folder)[0]["midi"])
+
+    def test_missing_or_unreadable_fallback_keeps_source_listing(self):
+        (self.folder / "name.wav").touch()
+        (self.folder / "name.mid").touch()
+        self.assertTrue(scan_audio_folder(self.folder, self.fallback)[0]["midi"])
+        scan = os.scandir
+        def unavailable(folder):
+            if Path(folder) == self.fallback:
+                raise OSError("share unavailable")
+            return scan(folder)
+        with patch("conversion_service.os.scandir", side_effect=unavailable):
+            self.assertTrue(scan_audio_folder(self.folder, self.fallback)[0]["midi"])
+
+    def test_same_directory_is_listed_once(self):
+        (self.folder / "name.wav").touch()
+        (self.folder / "name (1).mid").touch()
+        with patch("conversion_service.os.scandir", wraps=os.scandir) as scan:
+            self.assertTrue(scan_audio_folder(self.folder, self.folder)[0]["midi"])
+        scan.assert_called_once()
 
 
 def make_midi(path, notes=True):

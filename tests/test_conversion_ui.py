@@ -78,6 +78,11 @@ class DialogTests(unittest.TestCase):
         self.assertEqual(self.ui.settings["audio_input_folder"], "D:/new")
         self.assertEqual(self.ui.settings["instrument"], "violin")
 
+    def test_refresh_passes_configured_output_folder(self):
+        self.ui.settings["converted_output_dir"] = "D:/converted"
+        self.dialog.refresh()
+        self.service.scan.assert_called_with("C:/audio", self.dialog.scan_token, fallback_dir="D:/converted")
+
     def test_missing_model_prompt_decline_and_accept(self):
         self.dialog.source.set("C:/audio/piano.wav")
         self.dialog.convert()
@@ -267,6 +272,18 @@ class IntegrationTests(unittest.TestCase):
         service.scan(self.folder, "barrier")
         self.event(service, "scan")
         self.assertEqual(app_storage.load_settings()["last_audio_dir"], "elsewhere")
+
+    def test_service_scan_detects_configured_fallback_midi(self):
+        fallback = self.folder / "output"
+        fallback.mkdir()
+        (self.folder / "name.wav").touch()
+        (fallback / "name (1).mid").touch()
+        service = self.start_service()
+        self.event(service, "initialized")
+        service.scan(self.folder, "fallback", fallback_dir=fallback)
+        result = self.event(service, "scan")
+        self.assertEqual(result["token"], "fallback")
+        self.assertTrue(result["rows"][0]["midi"])
 
     def test_main_process_model_guard_never_patches_os_system(self):
         original = os.system

@@ -217,7 +217,7 @@ def output_temporary(source, job_id, fallback_dir=None):
             if index:
                 directory.mkdir(parents=True, exist_ok=True)
             return registered_temp(directory, job_id)
-        except (PermissionError, FileNotFoundError) as exc:
+        except OSError as exc:
             last_error = exc
     raise ConversionError(f"Cannot write MIDI beside the source or in the fallback folder: {last_error}")
 

@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import queue
+import re
 import stat
 import sys
 import threading
@@ -27,10 +28,22 @@ def missing_dependencies():
             if importlib.util.find_spec(name) is None]
 
 
-def scan_audio_folder(folder):
+def scan_audio_folder(folder, fallback_dir=None):
     rows = []
+    midi_stems = set()
+
+    def record_midi(entry):
+        path = Path(entry.name)
+        if path.suffix.lower() == ".mid" and entry.is_file(follow_symlinks=False):
+            stem = path.stem.casefold()
+            midi_stems.add(stem)
+            numbered = re.fullmatch(r"(.+) \([1-9][0-9]*\)", stem)
+            if numbered:
+                midi_stems.add(numbered.group(1))
+
     with os.scandir(folder) as entries:
         for entry in entries:
+            record_midi(entry)
             if not entry.is_file(follow_symlinks=False) or Path(entry.name).suffix.lower() not in config.SUPPORTED_AUDIO_EXTS:
                 continue
             metadata = entry.stat(follow_symlinks=False)
@@ -38,7 +51,17 @@ def scan_audio_folder(folder):
                 continue
             path = Path(entry.path)
             rows.append({"path": str(path.resolve()), "name": entry.name, "size": metadata.st_size,
-                         "modified": metadata.st_mtime, "midi": path.with_suffix(".mid").is_file()})
+                         "modified": metadata.st_mtime})
+    fallback = Path(fallback_dir) if fallback_dir else app_data_dir() / config.CONVERTED_OUTPUT_FOLDER
+    if os.path.normcase(os.path.abspath(fallback)) != os.path.normcase(os.path.abspath(folder)):
+        try:
+            with os.scandir(fallback) as entries:
+                for entry in entries:
+                    record_midi(entry)
+        except OSError:
+            pass  # The fallback may not exist yet or may be temporarily unavailable.
+    for row in rows:
+        row["midi"] = Path(row["name"]).stem.casefold() in midi_stems
     return sorted(rows, key=lambda row: (row["name"].casefold(), row["name"]))
 
 
@@ -56,8 +79,8 @@ class ConversionService:
         self.job_thread.start()
         self.io_commands.put(("initialize", {}))
 
-    def scan(self, folder, token):
-        self.io_commands.put(("scan", {"folder": folder, "token": token}))
+    def scan(self, folder, token, fallback_dir=None):
+        self.io_commands.put(("scan", {"folder": folder, "token": token, "fallback_dir": fallback_dir}))
 
     def save(self, updates):
         self.io_commands.put(("save", updates))
@@ -103,7 +126,8 @@ class ConversionService:
                         except Exception as exc:
                             self.events.put({"type": "warning", "message": f"Temporary cleanup deferred: {exc}"})
                     elif action == "scan":
-                        self.events.put({"type": "scan", **data, "rows": scan_audio_folder(data["folder"])})
+                        self.events.put({"type": "scan", **data,
+                                         "rows": scan_audio_folder(data["folder"], data.get("fallback_dir"))})
                     elif action == "save":
                         save_settings(data)
                     elif action == "preflight":

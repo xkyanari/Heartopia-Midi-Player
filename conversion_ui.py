@@ -176,7 +176,8 @@ class ConvertDialog:
 
     def refresh(self):
         self.scan_token = uuid.uuid4().hex
-        self.owner.service.scan(self.folder.get(), self.scan_token)
+        self.owner.service.scan(self.folder.get(), self.scan_token,
+                                fallback_dir=self.owner.settings.get("converted_output_dir"))
 
     def change_folder(self):
         folder = filedialog.askdirectory(parent=self.window, initialdir=self.folder.get() or None)
