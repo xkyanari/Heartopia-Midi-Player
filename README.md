@@ -275,6 +275,8 @@ For best results, use simple MIDI files designed for the specific instrument you
 
 ## Contributing
 
+To run tests, install `pip install -r requirements-dev.txt`, then run `python -m pytest`.
+
 Feel free to contribute! I built this in a few days, so there's plenty of room for improvement:
 
 * Improve the visual keyboard mapping

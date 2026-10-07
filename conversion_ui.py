@@ -211,7 +211,7 @@ class ConvertDialog:
 
     def approve_download(self):
         return messagebox.askyesno("Download piano model", f"Download approximately {config.CHECKPOINT_EXPECTED_BYTES / 1_000_000:.0f} MB to:\n"
-                f"{model_destination().parent}\n\nAudio stays on this computer. Existing model files will be kept.", parent=self.window)
+                f"{model_destination().parent}\n\nAudio stays on this computer. App-downloaded models may be replaced; user-provided files will be kept.", parent=self.window)
 
     def redownload(self):
         if self.approve_download():
@@ -302,7 +302,7 @@ class ConvertDialog:
                     return
                 if self.owner.closing or not self.owner.busy:
                     return
-                request.update(allow_download=True, force_download=True, checkpoint_path=None)
+                request.update(allow_download=True, force_download=False, checkpoint_path=None)
             self.dispatched = True
             self.owner.service.start(request)
         elif kind == "preflight_error":

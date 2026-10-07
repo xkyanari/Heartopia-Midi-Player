@@ -88,7 +88,7 @@ class DialogTests(unittest.TestCase):
         self.dialog.convert()
         with patch.object(self.dialog, "approve_download", return_value=True):
             self.preflight_result(False)
-        self.assertTrue(self.service.start.call_args.args[0]["force_download"])
+        self.assertFalse(self.service.start.call_args.args[0]["force_download"])
         self.assertTrue(self.ui.busy)
 
     def test_redownload_and_manual_model_only_switch_after_validation(self):
