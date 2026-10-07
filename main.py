@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, ttk
 import multiprocessing
 import os
 import random
+from ui_theme import button, style_combobox
 
 from app_storage import (
     load_layout_settings,
@@ -19,7 +20,7 @@ from app_config import (
     APP_TITLE,
     APP_VERSION,
     BACKGROUND_COLOR,
-    BUTTON_COLOR,
+    CARD_COLOR,
     DEFAULT_INSTRUMENT,
     DEFAULT_LAYOUT,
     DEFAULT_STATUS,
@@ -32,6 +33,7 @@ from app_config import (
     MUSICAL_CHAIRS_MIN_SECONDS,
     MUTED_TEXT_COLOR,
     PANEL_COLOR,
+    PLAYLIST_FONT,
     PAUSE_POLL_INTERVAL_MS,
     PLAYBACK_BUTTONS,
     PLAYBACK_SPEED,
@@ -41,6 +43,9 @@ from app_config import (
     SEPARATOR_COLOR,
     SONG_END_BUFFER_SECONDS,
     TEXT_COLOR,
+    TITLE_FONT,
+    TRANSPORT_FONT,
+    UI_FONT,
     WINDOW_SIZE,
 )
 
@@ -520,41 +525,48 @@ def main():
     root = tk.Tk()
     root.title(APP_TITLE)
     root.geometry(WINDOW_SIZE)
-    root.minsize(350, 500)
+    root.minsize(380, 580)
     root.configure(bg=BACKGROUND_COLOR)
+    root.option_add("*Font", UI_FONT)
+    style_combobox(root)
 
     # Title
     title_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    title_frame.pack(pady=(10, 2))
+    title_frame.pack(pady=(20, 6))
 
     tk.Label(title_frame, text=APP_TITLE, fg=TEXT_COLOR,
-             bg=BACKGROUND_COLOR, font=("Arial", 20, "bold")).pack()
+             bg=BACKGROUND_COLOR, font=TITLE_FONT).pack()
     tk.Label(title_frame, text=APP_CREDIT, fg=MUTED_TEXT_COLOR,
-             bg=BACKGROUND_COLOR, font=("Arial", 10)).pack()
+             bg=BACKGROUND_COLOR, font=UI_FONT).pack(pady=(4, 0))
 
     # Playlist
-    playlist_box = tk.Listbox(root, bg=PANEL_COLOR, fg=TEXT_COLOR,
-                              selectbackground=SELECTION_COLOR, font=("Arial", 12), exportselection=False)
-    playlist_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+    playlist_card = tk.Frame(root, bg=CARD_COLOR, padx=12, pady=12)
+    playlist_card.pack(fill=tk.BOTH, expand=True, padx=16, pady=(10, 8))
+    playlist_box = tk.Listbox(playlist_card, bg=PANEL_COLOR, fg=TEXT_COLOR,
+                              selectbackground=SELECTION_COLOR, selectforeground=TEXT_COLOR,
+                              font=PLAYLIST_FONT, exportselection=False,
+                              highlightthickness=0, bd=0, activestyle="none")
+    playlist_box.pack(fill=tk.BOTH, expand=True)
 
     playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
 
     # Status
     status_label = tk.Label(root, text=DEFAULT_STATUS, bg=BACKGROUND_COLOR,
-                            fg=TEXT_COLOR, font=("Arial", 12), justify=tk.CENTER)
-    status_label.pack(pady=(0, 10))
+                            fg=MUTED_TEXT_COLOR, font=UI_FONT, justify=tk.CENTER)
+    status_label.pack(fill=tk.X, padx=16, pady=(0, 8))
 
     root.bind("<Configure>", update_status_wrap)
 
     # Instrument selection
     instrument_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    instrument_frame.pack(pady=5, padx=10, fill=tk.X)
+    instrument_frame.pack(pady=5, padx=16, fill=tk.X)
 
-    tk.Label(instrument_frame, text="Instrument:", bg=BACKGROUND_COLOR, fg=TEXT_COLOR).pack(anchor="w")
+    tk.Label(instrument_frame, text="Instrument", bg=BACKGROUND_COLOR, fg=MUTED_TEXT_COLOR).pack(anchor="w")
 
     instrument_var = tk.StringVar(value=DEFAULT_INSTRUMENT)
     instrument_box = ttk.Combobox(instrument_frame, textvariable=instrument_var, width=35,
-                                   values=list(INSTRUMENTS.keys()), state="readonly")
+                                   values=list(INSTRUMENTS.keys()), state="readonly",
+                                   style="Player.TCombobox", font=UI_FONT)
     instrument_box.pack(fill=tk.X, pady=(2, 5))
 
     instrument_box.bind("<<ComboboxSelected>>", on_instrument_change)
@@ -570,9 +582,8 @@ def main():
     ]
 
     for i, (text, cmd) in enumerate(file_buttons):
-        tk.Button(btn_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=10).grid(row=0, column=i, padx=4, pady=3)
-    convert_button = tk.Button(btn_frame, text=FILE_BUTTONS["convert_audio"], command=conversion_ui.open,
-                               bg=BUTTON_COLOR, fg=TEXT_COLOR, width=12)
+        button(btn_frame, text, cmd, width=9).grid(row=0, column=i, padx=4, pady=3)
+    convert_button = button(btn_frame, FILE_BUTTONS["convert_audio"], conversion_ui.open, width=12)
     convert_button.grid(row=0, column=2, padx=4, pady=3)
     conversion_ui.attach_button(convert_button)
 
@@ -590,7 +601,8 @@ def main():
     ]
 
     for i, (text, cmd) in enumerate(playback_buttons):
-        tk.Button(playback_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
+        button(playback_frame, text, cmd, accent=cmd is play_selected,
+               width=3, font=TRANSPORT_FONT).grid(row=0, column=i, padx=3, pady=3)
 
     # Loop controls frame
     loop_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
@@ -601,16 +613,16 @@ def main():
     ]
 
     for i, (text, cmd) in enumerate(loop_buttons):
-        tk.Button(loop_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
+        button(loop_frame, text, cmd, width=8).grid(row=0, column=i, padx=4, pady=3)
 
-    tk.Button(loop_frame, text=PLAYBACK_BUTTONS["musical_chairs"], command=play_musical_chairs,
-              bg=BUTTON_COLOR, fg=TEXT_COLOR, width=14).grid(row=0, column=1, padx=2, pady=3)
+    button(loop_frame, PLAYBACK_BUTTONS["musical_chairs"], play_musical_chairs,
+           width=16).grid(row=0, column=1, padx=4, pady=3)
 
     # Footer
-    tk.Frame(root, bg=SEPARATOR_COLOR, height=1).pack(fill=tk.X, pady=10)
+    tk.Frame(root, bg=SEPARATOR_COLOR, height=1).pack(fill=tk.X, padx=16, pady=(12, 8))
 
     footer = tk.Frame(root, bg=BACKGROUND_COLOR)
-    footer.pack(fill=tk.X, padx=10)
+    footer.pack(fill=tk.X, padx=16, pady=(0, 12))
 
     tk.Label(footer, text=APP_VERSION, fg=FOOTER_TEXT_COLOR, bg=BACKGROUND_COLOR).pack(side=tk.LEFT)
     # tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),

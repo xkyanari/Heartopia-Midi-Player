@@ -2,15 +2,24 @@ APP_TITLE = "Heartopia MIDI Player"
 APP_VERSION = "v0.4.9"
 APP_CREDIT = "by yukiokoito, modified by Kyanari"
 
-WINDOW_SIZE = "360x560"
-BACKGROUND_COLOR = "#1e1e1e"
-PANEL_COLOR = "#2e2e2e"
-BUTTON_COLOR = "#333333"
-SEPARATOR_COLOR = "#444444"
-TEXT_COLOR = "white"
-MUTED_TEXT_COLOR = "#bbbbbb"
-FOOTER_TEXT_COLOR = "#aaaaaa"
-SELECTION_COLOR = "#555555"
+WINDOW_SIZE = "380x620"
+BACKGROUND_COLOR = "#15171c"
+PANEL_COLOR = "#20242d"
+CARD_COLOR = PANEL_COLOR
+BUTTON_COLOR = "#2c313d"
+HOVER_COLOR = "#3b4252"
+ACCENT_COLOR = "#b8a4ed"
+ACCENT_HOVER_COLOR = "#cbb9fa"
+ACCENT_TEXT_COLOR = "#201a30"
+SEPARATOR_COLOR = "#303541"
+TEXT_COLOR = "#f0f1f5"
+MUTED_TEXT_COLOR = "#a6adbe"
+FOOTER_TEXT_COLOR = "#858ea3"
+SELECTION_COLOR = "#655487"
+UI_FONT = ("Segoe UI", 10)
+TITLE_FONT = ("Segoe UI", 18, "bold")
+PLAYLIST_FONT = ("Segoe UI", 11)
+TRANSPORT_FONT = ("Segoe UI", 13)
 
 PLAYLIST_FILE = "playlist.json"
 LAYOUT_FILE = "layout.json"
@@ -87,12 +96,12 @@ FILE_BUTTONS = {
 }
 
 PLAYBACK_BUTTONS = {
-    "previous": "<<",
-    "play_selected": ">",
-    "play_playlist": ">>",
+    "previous": "⏮",
+    "play_selected": "▶",
+    "play_playlist": "▶▶",
     "musical_chairs": "Musical Chairs",
-    "pause_resume": "Pause",
-    "stop": "Stop",
-    "next": ">>|",
-    "loop": "Loop",
+    "pause_resume": "⏯",
+    "stop": "⏹",
+    "next": "⏭",
+    "loop": "↻ Loop",
 }
