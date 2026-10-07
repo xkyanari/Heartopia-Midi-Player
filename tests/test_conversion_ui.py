@@ -78,6 +78,11 @@ class DialogTests(unittest.TestCase):
         self.assertEqual(self.ui.settings["audio_input_folder"], "D:/new")
         self.assertEqual(self.ui.settings["instrument"], "violin")
 
+    def test_refresh_passes_configured_output_folder(self):
+        self.ui.settings["converted_output_dir"] = "D:/converted"
+        self.dialog.refresh()
+        self.service.scan.assert_called_with("C:/audio", self.dialog.scan_token, fallback_dir="D:/converted")
+
     def test_missing_model_prompt_decline_and_accept(self):
         self.dialog.source.set("C:/audio/piano.wav")
         self.dialog.convert()
@@ -88,7 +93,7 @@ class DialogTests(unittest.TestCase):
         self.dialog.convert()
         with patch.object(self.dialog, "approve_download", return_value=True):
             self.preflight_result(False)
-        self.assertTrue(self.service.start.call_args.args[0]["force_download"])
+        self.assertFalse(self.service.start.call_args.args[0]["force_download"])
         self.assertTrue(self.ui.busy)
 
     def test_redownload_and_manual_model_only_switch_after_validation(self):
@@ -171,6 +176,32 @@ class DialogTests(unittest.TestCase):
         self.status.assert_called_with(config.SETTINGS_SAVE_WARNING)
         error.assert_not_called()
 
+    def test_warning_keeps_elapsed_time_running(self):
+        self.dialog.begin({"source": "piano.wav"})
+        started = self.dialog.started
+        warning = "Settings could not be saved."
+        with patch("conversion_ui.messagebox.showerror") as error:
+            self.dialog.handle({"type": "warning", "message": warning})
+        self.assertEqual(self.dialog.started, started)
+        self.assertEqual(self.dialog.info.get(), warning)
+        self.status.assert_called_with(warning)
+        self.assertTrue(self.ui.busy)
+        error.assert_not_called()
+        with patch("conversion_ui.time.monotonic", return_value=started + 7):
+            self.dialog.tick()
+        self.assertIn("Elapsed 7 s", self.dialog.info.get())
+
+    def test_success_after_cancel_is_saved_and_sent_to_playlist(self):
+        self.dialog.begin({"source": "piano.wav"})
+        self.preflight_result()
+        self.dialog.cancel()
+        self.service.events.put({"type": "success", "path": "piano.mid"})
+        self.service.events.put({"type": "finished"})
+        self.ui._poll()
+        self.converted.assert_called_once_with("piano.mid")
+        self.assertEqual(self.dialog.info.get(), "Saved: piano.mid")
+        self.assertFalse(self.ui.busy)
+
 
 class IntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -241,6 +272,18 @@ class IntegrationTests(unittest.TestCase):
         service.scan(self.folder, "barrier")
         self.event(service, "scan")
         self.assertEqual(app_storage.load_settings()["last_audio_dir"], "elsewhere")
+
+    def test_service_scan_detects_configured_fallback_midi(self):
+        fallback = self.folder / "output"
+        fallback.mkdir()
+        (self.folder / "name.wav").touch()
+        (fallback / "name (1).mid").touch()
+        service = self.start_service()
+        self.event(service, "initialized")
+        service.scan(self.folder, "fallback", fallback_dir=fallback)
+        result = self.event(service, "scan")
+        self.assertEqual(result["token"], "fallback")
+        self.assertTrue(result["rows"][0]["midi"])
 
     def test_main_process_model_guard_never_patches_os_system(self):
         original = os.system

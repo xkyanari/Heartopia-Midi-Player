@@ -1,6 +1,5 @@
 """Parent-owned conversion lifecycle; UI integration is deliberately separate."""
 import multiprocessing
-import queue
 import time
 import uuid
 
@@ -67,7 +66,8 @@ class ConversionJob:
         while True:
             try:
                 message = self.messages.get_nowait()
-            except (queue.Empty, EOFError, OSError):
+            except Exception:
+                # A terminated writer can leave an incomplete or corrupt frame.
                 break
             if message["type"] == "stage":
                 if message["stage"] in ("transcribing", "downloading"):
@@ -84,15 +84,14 @@ class ConversionJob:
     def poll(self):
         if not self.active:
             return []
-        # Terminate may interrupt a queue writer; never read a killed queue.
+        # Wait until a cancelled writer is dead before reading partial frames.
         events = [] if self.cancel_reason else self._drain()
         if self.deadline and time.monotonic() >= self.deadline and not self.terminal:
             self.cancel(self.timeout_message)
         if self.process.is_alive():
             return events
         self.process.join(timeout=0)
-        if not self.cancel_reason:
-            events.extend(self._drain())
+        events.extend(self._drain())
         if not self.terminal:
             events.append({"type": "cancelled" if self.cancel_reason else "error",
                            "message": self.cancel_reason or f"Conversion worker exited unexpectedly ({self.process.exitcode})."})

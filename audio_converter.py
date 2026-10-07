@@ -1,9 +1,11 @@
 """Local conversion primitives, called only from the spawned worker. No Tk."""
 import hashlib
+from contextlib import nullcontext
 import importlib
 import json
 import multiprocessing
 import os
+import re
 from pathlib import Path
 import time
 import urllib.request
@@ -86,9 +88,9 @@ def _checkpoint_identity(path):
     return {"inode": stat.st_ino, "birth_time": stat.st_birthtime}
 
 
-def _record_checkpoint_owner(path):
+def _record_checkpoint_owner(path, *, locked=False):
     marker = _checkpoint_marker(path)
-    with state_file_lock():
+    with nullcontext() if locked else state_file_lock():
         temporary = marker.with_suffix(".json.tmp")
         try:
             temporary.write_text(json.dumps(_checkpoint_identity(path)), encoding="utf-8")
@@ -97,10 +99,35 @@ def _record_checkpoint_owner(path):
             temporary.unlink(missing_ok=True)
 
 
-def _remove_owned_corrupt_checkpoint(path, expected_identity):
+def _owned_checkpoint_identity(path):
+    """Ownership requires both the app folder and a matching file identity."""
+    path = Path(path).resolve()
+    if path.parent != default_checkpoint().parent.resolve():
+        return None
+    try:
+        identity = _checkpoint_identity(path)
+        if json.loads(_checkpoint_marker(path).read_text(encoding="utf-8")) == identity:
+            return identity
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _cleanup_old_checkpoints(target):
+    # Called with the publication lock held so simultaneous recoveries cannot
+    # delete each other's newly published files.
+    for path in target.parent.glob("piano-*.pth"):
+        if path == target or not re.fullmatch(r"piano-[0-9a-f]{32}\.pth", path.name):
+            continue
+        identity = _owned_checkpoint_identity(path)
+        if identity is not None:
+            _remove_owned_corrupt_checkpoint(path, identity, locked=True)
+
+
+def _remove_owned_corrupt_checkpoint(path, expected_identity, *, locked=False):
     """Never infer ownership merely from a filename or directory."""
     marker = _checkpoint_marker(path)
-    with state_file_lock():
+    with nullcontext() if locked else state_file_lock():
         try:
             identity = json.loads(marker.read_text(encoding="utf-8"))
             if identity != expected_identity or identity != _checkpoint_identity(path):
@@ -150,17 +177,17 @@ def load_model(path):
 
 def prepare_model(job_id, checkpoint_path=None, allow_download=False, progress=None, force_download=False):
     progress = progress or (lambda message: None)
-    if checkpoint_path and not force_download:
-        # User-selected files are never modified or removed, even if invalid.
-        try:
-            return load_model(checkpoint_path), str(Path(checkpoint_path).resolve())
-        except Exception as exc:
-            raise ConversionError(f"Cannot load the selected checkpoint; the original file was kept. {exc}") from exc
     target = default_checkpoint()
-    if force_download:
-        # Recovery never edits/deletes the old cache or a manually selected file.
-        target = target.with_name(f"piano-{uuid.uuid4().hex}.pth")
-    if target.exists():
+    if checkpoint_path and not force_download:
+        if _owned_checkpoint_identity(checkpoint_path) is not None:
+            target = Path(checkpoint_path).resolve()
+        else:
+            # User-selected files are never modified or removed, even if invalid.
+            try:
+                return load_model(checkpoint_path), str(Path(checkpoint_path).resolve())
+            except Exception as exc:
+                raise ConversionError(f"Cannot load the selected checkpoint; the original file was kept. {exc}") from exc
+    if target.exists() and not force_download:
         cache_identity = _checkpoint_identity(target)
         try:
             return load_model(target), str(target)
@@ -196,8 +223,19 @@ def prepare_model(job_id, checkpoint_path=None, allow_download=False, progress=N
         progress({"type": "stage", "stage": "loading_model"})
         model = load_model(temporary)  # Includes size validation and actual load.
         try:
-            os.rename(temporary, target)  # Windows: never overwrite a concurrent download.
-            _record_checkpoint_owner(target)
+            with state_file_lock():
+                if force_download:
+                    # Recheck ownership under the lock before replacing any file.
+                    if target.exists() and _owned_checkpoint_identity(target) is None:
+                        target = target.with_name(f"piano-{uuid.uuid4().hex}.pth")
+                        os.rename(temporary, target)
+                    else:
+                        os.replace(temporary, target)
+                else:
+                    os.rename(temporary, target)  # Windows: never overwrite a concurrent download.
+                _record_checkpoint_owner(target, locked=True)
+                if force_download:
+                    _cleanup_old_checkpoints(target)
         except FileExistsError:
             # Another instance won; verify the shared winner rather than replace it.
             model = load_model(target)
@@ -217,7 +255,7 @@ def output_temporary(source, job_id, fallback_dir=None):
             if index:
                 directory.mkdir(parents=True, exist_ok=True)
             return registered_temp(directory, job_id)
-        except (PermissionError, FileNotFoundError) as exc:
+        except OSError as exc:
             last_error = exc
     raise ConversionError(f"Cannot write MIDI beside the source or in the fallback folder: {last_error}")
 

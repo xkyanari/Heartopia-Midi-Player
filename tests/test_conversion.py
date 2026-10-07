@@ -1,4 +1,5 @@
 import io
+import hashlib
 import json
 import multiprocessing
 import os
@@ -12,6 +13,80 @@ import wave
 import audio_converter as converter
 import conversion_files as files
 from conversion_job import ConversionJob
+from conversion_service import scan_audio_folder
+
+
+class OutputFolderTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.folder = Path(directory.name)
+        self.fallback = self.folder / "fallback"
+
+    def test_generic_oserror_uses_fallback(self):
+        temporary = self.fallback / "output.part"
+        with patch.object(converter, "registered_temp", side_effect=[OSError("disk full"), temporary]) as register:
+            self.assertEqual(converter.output_temporary(self.folder / "name.wav", "job", self.fallback), temporary)
+        self.assertTrue(self.fallback.is_dir())
+        self.assertEqual(register.call_args_list[0].args, (self.folder, "job"))
+        self.assertEqual(register.call_args_list[1].args, (self.fallback, "job"))
+
+    def test_non_oserror_propagates_without_fallback(self):
+        with patch.object(converter, "registered_temp", side_effect=ValueError("invalid registry")) as register:
+            with self.assertRaisesRegex(ValueError, "invalid registry"):
+                converter.output_temporary(self.folder / "name.wav", "job", self.fallback)
+        register.assert_called_once()
+        self.assertFalse(self.fallback.exists())
+
+    def test_both_output_folders_fail_with_existing_message(self):
+        with patch.object(converter, "registered_temp", side_effect=[OSError("disk full"), OSError("share unavailable")]):
+            with self.assertRaisesRegex(converter.ConversionError,
+                                        "Cannot write MIDI beside the source or in the fallback folder: share unavailable"):
+                converter.output_temporary(self.folder / "name.wav", "job", self.fallback)
+
+    def test_scan_detects_exact_numbered_and_fallback_midi_case_insensitively(self):
+        self.fallback.mkdir()
+        for name in ("exact.wav", "numbered.mp3", "saved.flac", "saved copy.ogg", "name.wav"):
+            (self.folder / name).touch()
+        for name in ("EXACT.MID", "NUMBERED (1).mid", "name2.mid", "name (0).mid", "name (-1).mid",
+                     "name (x).mid", "name (1) extra.mid"):
+            (self.folder / name).touch()
+        (self.folder / "name (2).mid").mkdir()
+        (self.fallback / "SAVED.mid").touch()
+        (self.fallback / "SAVED COPY (12).MID").touch()
+        with patch("conversion_service.os.scandir", wraps=os.scandir) as scan:
+            rows = scan_audio_folder(self.folder, self.fallback)
+        self.assertEqual(scan.call_count, 2)
+        self.assertEqual({row["name"]: row["midi"] for row in rows},
+                         {"exact.wav": True, "numbered.mp3": True, "saved.flac": True,
+                          "saved copy.ogg": True, "name.wav": False})
+
+    def test_scan_uses_default_fallback(self):
+        fallback = self.folder / converter.CONVERTED_OUTPUT_FOLDER
+        fallback.mkdir()
+        (self.folder / "name.wav").touch()
+        (fallback / "name (1).mid").touch()
+        with patch("conversion_service.app_data_dir", return_value=self.folder):
+            self.assertTrue(scan_audio_folder(self.folder)[0]["midi"])
+
+    def test_missing_or_unreadable_fallback_keeps_source_listing(self):
+        (self.folder / "name.wav").touch()
+        (self.folder / "name.mid").touch()
+        self.assertTrue(scan_audio_folder(self.folder, self.fallback)[0]["midi"])
+        scan = os.scandir
+        def unavailable(folder):
+            if Path(folder) == self.fallback:
+                raise OSError("share unavailable")
+            return scan(folder)
+        with patch("conversion_service.os.scandir", side_effect=unavailable):
+            self.assertTrue(scan_audio_folder(self.folder, self.fallback)[0]["midi"])
+
+    def test_same_directory_is_listed_once(self):
+        (self.folder / "name.wav").touch()
+        (self.folder / "name (1).mid").touch()
+        with patch("conversion_service.os.scandir", wraps=os.scandir) as scan:
+            self.assertTrue(scan_audio_folder(self.folder, self.folder)[0]["midi"])
+        scan.assert_called_once()
 
 
 def make_midi(path, notes=True):
@@ -56,6 +131,126 @@ def stalled_download_worker(request, messages):
     files.registered_temp(request["source"], request["job_id"])
     messages.put({"type": "stage", "stage": "downloading", "started": time.monotonic(), "timeout": .1})
     time.sleep(30)
+
+
+class CheckpointTests(unittest.TestCase):
+    """Checkpoint safety needs no conversion libraries or network access."""
+
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.folder = Path(directory.name)
+        for context in (
+            patch.dict(os.environ, {"LOCALAPPDATA": directory.name}),
+            patch.object(files, "process_identity", return_value={"pid": os.getpid(), "start_time": 1}),
+            patch.object(converter.urllib.request, "urlopen", side_effect=lambda *a, **k: io.BytesIO(b"model")),
+            patch.object(converter, "load_model", return_value="model-object"),
+        ):
+            context.start()
+            self.addCleanup(context.stop)
+
+    def checkpoint(self, name=None, owned=True):
+        target = converter.default_checkpoint()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if name:
+            target = target.with_name(name)
+        target.write_bytes(b"old")
+        if owned:
+            converter._record_checkpoint_owner(target)
+        return target
+
+    def test_first_download_uses_default_name_and_registers_owner(self):
+        _, path = converter.prepare_model("first", allow_download=True)
+        target = converter.default_checkpoint()
+        self.assertEqual(Path(path), target)
+        self.assertEqual(target.read_bytes(), b"model")
+        self.assertIsNotNone(converter._owned_checkpoint_identity(target))
+        self.assertEqual(list(target.parent.glob("*.pth")), [target])
+        self.assertEqual(files._read_registry(), {})
+
+    def test_redownload_replaces_owned_default_and_cleans_owned_leftovers(self):
+        target = self.checkpoint()
+        old = self.checkpoint(f"piano-{'a' * 32}.pth")
+        def validate(path):
+            self.assertEqual(target.read_bytes(), b"old")
+            self.assertEqual(Path(path).read_bytes(), b"model")
+            self.assertIn(str(Path(path).resolve()), files._read_registry())
+            return "model-object"
+        with patch.object(converter, "load_model", side_effect=validate):
+            for _ in range(2):
+                _, path = converter.prepare_model("replace", str(target), True, force_download=True)
+                self.assertEqual(Path(path), target)
+                self.assertEqual(target.read_bytes(), b"model")
+                self.assertIsNotNone(converter._owned_checkpoint_identity(target))
+                self.assertEqual(list(target.parent.glob("*.pth")), [target])
+                target.write_bytes(b"old")
+        self.assertFalse(converter._checkpoint_marker(old).exists())
+        self.assertEqual(files._read_registry(), {})
+
+    def test_redownload_preserves_unowned_and_mismatched_files(self):
+        target = self.checkpoint(owned=False)
+        unowned = self.checkpoint(f"piano-{'b' * 32}.pth", owned=False)
+        mismatch = self.checkpoint(f"piano-{'c' * 32}.pth")
+        converter._checkpoint_marker(mismatch).write_text('{}', encoding="utf-8")
+        _, path = converter.prepare_model("unowned", str(target), True, force_download=True)
+        self.assertNotEqual(Path(path), target)
+        for original in (target, unowned, mismatch):
+            self.assertEqual(original.read_bytes(), b"old")
+        self.assertIsNotNone(converter._owned_checkpoint_identity(path))
+
+    def test_failed_redownload_keeps_previous_model_and_cleans_temp(self):
+        target = self.checkpoint()
+        with patch.object(converter, "load_model", side_effect=ValueError("bad model")):
+            with self.assertRaises(converter.ConversionError):
+                converter.prepare_model("bad", str(target), True, force_download=True)
+        self.assertEqual(target.read_bytes(), b"old")
+        self.assertIsNotNone(converter._owned_checkpoint_identity(target))
+        self.assertEqual(list(target.parent.glob("*.pth")), [target])
+        self.assertEqual(files._read_registry(), {})
+        self.assertEqual(list(target.parent.glob("*.part")), [])
+
+    def test_replacement_rechecks_ownership_after_model_validation(self):
+        target = self.checkpoint()
+        def validate(path):
+            converter._checkpoint_marker(target).write_text('{}', encoding="utf-8")
+            return "model-object"
+        with patch.object(converter, "load_model", side_effect=validate):
+            _, path = converter.prepare_model("changed-owner", allow_download=True, force_download=True)
+        self.assertNotEqual(Path(path), target)
+        self.assertEqual(target.read_bytes(), b"old")
+
+    def test_saved_owned_corrupt_checkpoint_is_removed(self):
+        for name in (None, f"piano-{'d' * 32}.pth"):
+            with self.subTest(name=name):
+                target = self.checkpoint(name)
+                with patch.object(converter, "load_model", side_effect=ValueError("bad model")):
+                    with self.assertRaisesRegex(converter.ConversionError, "removed.*Download it again"):
+                        converter.prepare_model("saved", str(target))
+                self.assertFalse(target.exists())
+                self.assertFalse(converter._checkpoint_marker(target).exists())
+
+    def test_selected_corrupt_files_without_app_ownership_are_kept(self):
+        unowned = self.checkpoint(owned=False)
+        outside = self.folder / "chosen.pth"
+        outside.write_bytes(b"user")
+        converter._record_checkpoint_owner(outside)
+        mismatch = self.checkpoint(f"piano-{'e' * 32}.pth")
+        converter._checkpoint_marker(mismatch).write_text('{}', encoding="utf-8")
+        with patch.object(converter, "load_model", side_effect=ValueError("bad model")):
+            for target in (unowned, outside, mismatch):
+                with self.subTest(target=target), self.assertRaisesRegex(converter.ConversionError, "original file was kept"):
+                    converter.prepare_model("chosen", str(target))
+                self.assertTrue(target.exists())
+
+    def test_checksum_rejects_same_size_corruption(self):
+        target = self.checkpoint()
+        with patch.object(converter, "CHECKPOINT_EXPECTED_BYTES", 3), \
+             patch.object(converter, "CHECKPOINT_MIN_BYTES", 3), \
+             patch.object(converter, "CHECKPOINT_SHA256", hashlib.sha256(b"old").hexdigest()):
+            converter._validate_checkpoint(target)
+            target.write_bytes(b"bad")
+            with self.assertRaisesRegex(converter.ConversionError, "checksum"):
+                converter._validate_checkpoint(target)
 
 
 class ConversionTests(unittest.TestCase):
