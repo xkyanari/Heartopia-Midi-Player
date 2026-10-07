@@ -3,10 +3,24 @@ import tkinter as tk
 from tkinter import ttk
 import unittest
 from contextlib import ExitStack
+from pathlib import Path
+import re
 from unittest.mock import Mock, patch
 
 import app_config as config
 from ui_theme import button, style_combobox
+
+
+class VersionTests(unittest.TestCase):
+    def test_ui_version_matches_windows_metadata(self):
+        metadata = (Path(__file__).resolve().parents[1] / "version_info.txt").read_text(encoding="utf-8")
+        version = config.APP_VERSION.removeprefix("v")
+        for field in ("FileVersion", "ProductVersion"):
+            self.assertEqual(re.search(rf"StringStruct\('{field}', '([^']+)'\)", metadata)[1], version)
+        numbers = tuple(int(part) for part in version.split(".")) + (0,)
+        for field in ("filevers", "prodvers"):
+            recorded = re.search(rf"{field}=\(([^)]+)\)", metadata)[1]
+            self.assertEqual(tuple(int(part) for part in recorded.split(",")), numbers)
 
 
 class ThemeTests(unittest.TestCase):
@@ -83,6 +97,7 @@ class ThemeTests(unittest.TestCase):
             callbacks = {name: patches.enter_context(patch.object(main, name))
                          for name in commands}
             main.main()
+            self.assertEqual(self.root.title(), f"{config.APP_TITLE} {config.APP_VERSION}")
             self.assertEqual(main.status_label.cget("background"), config.PANEL_COLOR)
             main.set_status("Playing: example.mid")
             self.assertEqual(main.status_label.cget("text"), "Playing: example.mid")
@@ -93,6 +108,8 @@ class ThemeTests(unittest.TestCase):
                     yield from descendants(child)
 
             widgets = list(descendants(self.root))
+            self.assertTrue(any(isinstance(widget, tk.Label) and
+                                widget.cget("text") == config.APP_VERSION for widget in widgets))
             buttons = {widget.cget("text"): widget for widget in widgets
                        if isinstance(widget, tk.Button)}
             labels = {**config.PLAYBACK_BUTTONS, **config.FILE_BUTTONS}
@@ -105,8 +122,8 @@ class ThemeTests(unittest.TestCase):
                 buttons[config.FILE_BUTTONS["convert_audio"]])
 
             # Check every visible control stays inside the compact window and
-            # the expanding playlist remains usable at both supported sizes.
-            for size in (config.WINDOW_SIZE, "640x600"):
+            # the expanding playlist remains usable at each supported size.
+            for size in ("430x440", config.WINDOW_SIZE, "640x600"):
                 self.root.geometry(size)
                 self.root.update()
                 for widget in widgets:

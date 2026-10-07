@@ -6,15 +6,16 @@ import app_config as config
 
 
 def button(parent, text, command, *, accent=False, **options):
-    """Build a compact beveled button with disabled-aware hover feedback."""
+    """Build a flat button with disabled-aware hover feedback."""
     background = config.ACCENT_COLOR if accent else config.BUTTON_COLOR
     hover = config.ACCENT_HOVER_COLOR if accent else config.HOVER_COLOR
     foreground = config.ACCENT_TEXT_COLOR if accent else config.BUTTON_TEXT_COLOR
     widget = tk.Button(
         parent, text=text, command=command, bg=background, fg=foreground,
         activebackground=hover, activeforeground=foreground,
-        disabledforeground="#626779", relief=tk.RAISED, bd=2,
-        highlightthickness=0, padx=5, pady=3, cursor="hand2",
+        disabledforeground=config.FOOTER_TEXT_COLOR, relief=tk.FLAT, bd=0,
+        highlightthickness=1, highlightbackground=background,
+        highlightcolor=config.ACCENT_COLOR, padx=5, pady=5, cursor="hand2",
         font=options.pop("font", config.UI_FONT), **options,
     )
 
