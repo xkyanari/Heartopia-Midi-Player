@@ -3,7 +3,7 @@ from tkinter import filedialog, messagebox, ttk
 import multiprocessing
 import os
 import random
-from ui_theme import button, style_combobox
+from ui_theme import MidiVisualizer, button, style_combobox
 
 from app_storage import (
     load_layout_settings,
@@ -60,6 +60,8 @@ current_instrument = DEFAULT_INSTRUMENT
 loop_mode = "none"  # "none", "one", or "all"
 is_paused = False
 focus_check_id = None
+now_playing_label = None
+visualizer = None
 
 def switch_to_player():
     """Switch focus to the MIDI player window."""
@@ -82,9 +84,15 @@ def check_heartopia_focus():
 def set_status(text):
     status_label.config(text=text)
 
-# Placeholder for visual highlight (visual keyboard removed)
+def set_now_playing(name=None):
+    if now_playing_label is not None:
+        now_playing_label.config(text=name or "Nothing playing")
+
+
 def highlight_keys(keys):
-    return
+    if visualizer is not None:
+        visualizer.show_keys([] if is_paused else keys,
+                             list(player.note_map.values()) if player else [])
 
 # Playback control (no threads): scheduled via tkinter `after`
 playback_active = False
@@ -115,6 +123,7 @@ def cancel_playback():
         except Exception:
             pass
     pressed_keys.clear()
+    set_now_playing()
     try:
         highlight_keys([])
     except Exception:
@@ -151,7 +160,7 @@ def close_app():
     stop()
     conversion_ui.shutdown()
 
-def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
+def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=None):
     """Play `events` (list of (delay, notes)) using tkinter `after` scheduling.
     This avoids background threads and can be cancelled with `cancel_playback()`.
     """
@@ -160,6 +169,8 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
     playback_active = True
     playback_after_ids = []
     pressed_keys = []
+    set_now_playing(song_name if events else None)
+    all_notes_played = False
     global playback_gen
     playback_gen += 1
     my_gen = playback_gen
@@ -175,7 +186,9 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
             except ValueError:
                 pass
         if on_key_press:
-            on_key_press([])
+            on_key_press(list(pressed_keys))
+        if all_notes_played and not pressed_keys:
+            set_now_playing()
 
     def calculate_sustain_time(note):
         """Calculate sustain time for a single note based on MIDI duration.
@@ -205,6 +218,7 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
         delay, notes = events[i]
 
         def do_notes():
+            nonlocal all_notes_played
             if not playback_active:
                 return
 
@@ -214,14 +228,12 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
                 playback_after_ids.append(rid)
                 return
 
-            active_press_keys = []
             for note in notes:
                 # Note is (name, octave, duration_ms)
                 key = player.get_playable_key((note[0], note[1]))
                 if not key:
                     continue
 
-                active_press_keys.append(key)
                 try:
                     press_key(key)
                     pressed_keys.append(key)
@@ -233,7 +245,11 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
                 playback_after_ids.append(rid)
 
             if on_key_press:
-                on_key_press(active_press_keys)
+                on_key_press(list(pressed_keys))
+            if i == len(events) - 1:
+                all_notes_played = True
+                if not pressed_keys:
+                    set_now_playing()
             # schedule next note
             if my_gen == playback_gen and playback_active:
                 play_note_index(i+1)
@@ -324,7 +340,8 @@ def play_selected():
         messagebox.showerror("MIDI Error", str(e))
         return
     set_status(f"Playing: {playlist[current_index]['name']}")
-    start_playback(events, on_key_press=highlight_keys)
+    start_playback(events, on_key_press=highlight_keys,
+                   song_name=playlist[current_index]["name"])
     if switch_to_heartopia():  # Switch to Heartopia window for key presses
         root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
     
@@ -355,7 +372,7 @@ def play_playlist():
             play_next(idx+1)
             return
         set_status(f"Playing: {playlist[idx]['name']}")
-        start_playback(events, on_key_press=highlight_keys)
+        start_playback(events, on_key_press=highlight_keys, song_name=playlist[idx]["name"])
         if switch_to_heartopia():  # Switch to Heartopia window for key presses
             root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
         # Schedule next song with duration + 6 second buffer
@@ -397,7 +414,8 @@ def play_musical_chairs():
 
         excerpt_events, excerpt_duration = create_random_excerpt(events, duration)
         set_status(f"Playing: {playlist[current_index]['name']}")
-        start_playback(excerpt_events, on_key_press=highlight_keys)
+        start_playback(excerpt_events, on_key_press=highlight_keys,
+                       song_name=playlist[current_index]["name"])
         if switch_to_heartopia():
             root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
 
@@ -418,6 +436,7 @@ def pause_resume():
         messagebox.showinfo("Pause", "No playback to pause")
         return
     is_paused = not is_paused
+    highlight_keys(pressed_keys)
     if is_paused:
         set_status("Paused")
         switch_to_player()  # Switch to player window when paused
@@ -521,6 +540,7 @@ def save_instrument():
 
 def main():
     global root, playlist_box, status_label, instrument_var, player, conversion_ui
+    global now_playing_label, visualizer
     from conversion_ui import ConversionUI
 
     # Tk setup
@@ -539,26 +559,23 @@ def main():
     tk.Label(title_frame, text="MIDI PLAYER", fg=ACCENT_COLOR,
              bg=BACKGROUND_COLOR, font=UI_FONT).pack(side=tk.RIGHT)
 
-    # A flat player card with a decorative record beside the current status.
+    # A flat player card with MIDI note activity beside the current song.
     deck = tk.Frame(root, bg=CARD_COLOR, bd=0)
     deck.pack(fill=tk.X, padx=12, pady=(0, 4))
     tk.Frame(deck, bg=ACCENT_COLOR, height=2).pack(fill=tk.X)
     display = tk.Frame(deck, bg=PANEL_COLOR, bd=0)
     display.pack(fill=tk.X, padx=10, pady=(10, 8))
-    record = tk.Canvas(display, width=72, height=72, bg=PANEL_COLOR,
-                       highlightthickness=0, bd=0)
-    record.pack(side=tk.LEFT, padx=(8, 10), pady=8)
-    for inset in (2, 9, 16, 23):
-        record.create_oval(inset, inset, 72 - inset, 72 - inset,
-                           fill=BACKGROUND_COLOR, outline=SEPARATOR_COLOR)
-    record.create_oval(27, 27, 45, 45, fill=ACCENT_COLOR, outline=ACCENT_COLOR)
-    record.create_oval(34, 34, 38, 38, fill=PANEL_COLOR, outline=PANEL_COLOR)
+    visualizer = MidiVisualizer(display)
+    visualizer.pack(side=tk.LEFT, padx=(8, 10), pady=8)
     track_info = tk.Frame(display, bg=PANEL_COLOR)
     track_info.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
-    tk.Label(track_info, text="NOW PLAYING", bg=PANEL_COLOR,
+    tk.Label(track_info, text="Now Playing:", bg=PANEL_COLOR,
              fg=ACCENT_COLOR, font=UI_FONT, anchor="w").pack(fill=tk.X)
+    now_playing_label = tk.Label(track_info, text="Nothing playing", bg=PANEL_COLOR,
+                                fg=TEXT_COLOR, font=DISPLAY_FONT, anchor="w", width=1)
+    now_playing_label.pack(fill=tk.X, pady=(4, 0))
     status_label = tk.Label(track_info, text=DEFAULT_STATUS, bg=PANEL_COLOR,
-                            fg=TEXT_COLOR, font=DISPLAY_FONT, justify=tk.LEFT,
+                            fg=MUTED_TEXT_COLOR, font=UI_FONT, justify=tk.LEFT,
                             anchor="w", wraplength=260)
     status_label.pack(fill=tk.X, pady=(4, 0))
 
