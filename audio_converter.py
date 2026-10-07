@@ -85,7 +85,8 @@ def default_checkpoint():
 
 def _checkpoint_identity(path):
     stat = Path(path).stat()
-    return {"inode": stat.st_ino, "birth_time": stat.st_birthtime}
+    return {"inode": stat.st_ino,
+            "birth_time": getattr(stat, "st_birthtime", stat.st_ctime if os.name == "nt" else None)}
 
 
 def _record_checkpoint_owner(path, *, locked=False):
@@ -116,17 +117,21 @@ def _owned_checkpoint_identity(path):
 def _cleanup_old_checkpoints(target):
     # Called with the publication lock held so simultaneous recoveries cannot
     # delete each other's newly published files.
+    candidates = [target.parent / CHECKPOINT_FILE]
     try:
-        candidates = [target.parent / CHECKPOINT_FILE, *target.parent.glob("piano-*.pth")]
-        for path in candidates:
+        candidates.extend(target.parent.glob("piano-*.pth"))
+    except OSError:
+        pass
+    for path in candidates:
+        try:
             if path == target or (path.name != CHECKPOINT_FILE and
                                  not re.fullmatch(r"piano-[0-9a-f]{32}\.pth", path.name)):
                 continue
             identity = _owned_checkpoint_identity(path)
             if identity is not None:
                 _remove_owned_corrupt_checkpoint(path, identity, locked=True)
-    except OSError:
-        pass  # Cleanup must not discard a successfully published download.
+        except OSError:
+            pass  # One inaccessible file must not prevent cleaning the others.
 
 
 def _remove_owned_corrupt_checkpoint(path, expected_identity, *, locked=False):
@@ -161,9 +166,12 @@ def checkpoint_valid_size(path):
 
 def _checkpoint_verification(path):
     stat = Path(path).stat()
-    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
-            "inode": stat.st_ino, "birth_time": stat.st_birthtime,
-            "sha256": CHECKPOINT_SHA256}
+    record = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns,
+              "inode": stat.st_ino, "birth_time": getattr(stat, "st_birthtime", None),
+              "sha256": CHECKPOINT_SHA256}
+    if os.name != "nt":
+        record["ctime_ns"] = stat.st_ctime_ns
+    return record
 
 
 def _read_checkpoint_verifications():
@@ -194,12 +202,18 @@ def _write_checkpoint_verifications(records):
 
 def _move_checkpoint_verification(temporary, target):
     # Rename preserves identity; reuse the digest checked before publication.
-    records = _read_checkpoint_verifications()
-    previous = records.pop(str(Path(temporary).resolve()), None)
-    current = _checkpoint_verification(target)
-    if previous == current:
-        records[str(Path(target).resolve())] = current
-        _write_checkpoint_verifications(records)
+    try:
+        records = _read_checkpoint_verifications()
+        previous = records.pop(str(Path(temporary).resolve()), None)
+        current = _checkpoint_verification(target)
+        if isinstance(previous, dict) and "ctime_ns" in current:
+            # POSIX rename itself changes ctime, without changing the contents.
+            previous["ctime_ns"] = current["ctime_ns"]
+        if previous == current:
+            records[str(Path(target).resolve())] = current
+            _write_checkpoint_verifications(records)
+    except OSError:
+        pass  # Bookkeeping cannot fail an already-published download.
 
 
 def _validate_checkpoint(path):
@@ -212,12 +226,14 @@ def _validate_checkpoint(path):
             records = _read_checkpoint_verifications()
             if records.get(str(path)) == current:
                 return
-            with path.open("rb") as source:
-                actual = hashlib.file_digest(source, "sha256").hexdigest()
-            if actual != CHECKPOINT_SHA256:
-                raise ConversionError("Checkpoint checksum is invalid.")
+        with path.open("rb") as source:
+            actual = hashlib.file_digest(source, "sha256").hexdigest()
+        if actual != CHECKPOINT_SHA256:
+            raise ConversionError("Checkpoint checksum is invalid.")
+        with state_file_lock():
             if _checkpoint_verification(path) != current:
                 raise ConversionError("The checkpoint changed during verification; retry.")
+            records = _read_checkpoint_verifications()
             records[str(path)] = current
             _write_checkpoint_verifications(records)
 
@@ -248,6 +264,20 @@ def prepare_model(job_id, checkpoint_path=None, allow_download=False, progress=N
                 return load_model(checkpoint_path), str(Path(checkpoint_path).resolve())
             except Exception as exc:
                 raise ConversionError(f"Cannot load the selected checkpoint; the original file was kept. {exc}") from exc
+    if not checkpoint_path and not force_download and not target.exists():
+        with state_file_lock():
+            newest = None
+            for candidate in target.parent.glob("piano-*.pth"):
+                try:
+                    if (re.fullmatch(r"piano-[0-9a-f]{32}\.pth", candidate.name) and
+                            _owned_checkpoint_identity(candidate) is not None):
+                        modified = candidate.stat().st_mtime_ns
+                        if newest is None or modified > newest[0]:
+                            newest = (modified, candidate)
+                except OSError:
+                    continue
+            if newest is not None:
+                target = newest[1]
     if target.exists() and not force_download:
         cache_identity = _checkpoint_identity(target)
         try:
