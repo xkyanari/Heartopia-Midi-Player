@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+import multiprocessing
 import os
 import random
 
@@ -36,6 +37,7 @@ from app_config import (
     PLAYBACK_SPEED,
     PLAYBACK_START_DELAY_MS,
     SELECTION_COLOR,
+    SETTINGS_SAVE_WARNING,
     SEPARATOR_COLOR,
     SONG_END_BUFFER_SECONDS,
     TEXT_COLOR,
@@ -68,13 +70,6 @@ def check_heartopia_focus():
         focus_check_id = root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
     else:
         focus_check_id = None
-
-# Tk setup
-root = tk.Tk()
-root.title(APP_TITLE)
-root.geometry(WINDOW_SIZE)
-root.minsize(350, 500)
-root.configure(bg=BACKGROUND_COLOR)
 
 # Helpers
 def set_status(text):
@@ -117,6 +112,37 @@ def cancel_playback():
         highlight_keys([])
     except Exception:
         pass
+
+def is_playback_fully_stopped():
+    """Ignore stale IDs and playback_active after natural completion."""
+    if is_paused or pressed_keys:
+        return False
+    pending = set(root.tk.splitlist(root.tk.call("after", "info")))
+    return not pending.intersection(playback_after_ids)
+
+
+def add_converted_midi(path):
+    global current_index
+    idle = is_playback_fully_stopped()
+    playlist.append({"name": os.path.basename(path), "path": path})
+    playlist_box.insert(tk.END, os.path.basename(path))
+    if idle:
+        current_index = len(playlist) - 1
+        playlist_box.select_clear(0, tk.END)
+        playlist_box.select_set(current_index)
+        playlist_box.activate(current_index)
+        playlist_box.see(current_index)
+    try:
+        save_playlist()
+    except OSError as exc:
+        set_status(f"MIDI saved: {path}. Playlist could not be saved: {exc}")
+        return
+    set_status(f"{'Converted' if idle else 'Added to playlist'}: {path}")
+
+
+def close_app():
+    stop()
+    conversion_ui.shutdown()
 
 def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None):
     """Play `events` (list of (delay, notes)) using tkinter `after` scheduling.
@@ -233,38 +259,15 @@ def create_random_excerpt(events, duration):
 
     return excerpt_events, excerpt_duration
 
-# Title
-title_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-title_frame.pack(pady=(10, 2))
-
-tk.Label(title_frame, text=APP_TITLE, fg=TEXT_COLOR,
-         bg=BACKGROUND_COLOR, font=("Arial", 20, "bold")).pack()
-tk.Label(title_frame, text=APP_CREDIT, fg=MUTED_TEXT_COLOR,
-         bg=BACKGROUND_COLOR, font=("Arial", 10)).pack()
-
-# Playlist
-playlist_box = tk.Listbox(root, bg=PANEL_COLOR, fg=TEXT_COLOR,
-                          selectbackground=SELECTION_COLOR, font=("Arial", 12))
-playlist_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
-
 def on_playlist_select(event):
     global current_index
     sel = playlist_box.curselection()
     if sel:
         current_index = sel[0]
 
-playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
-
-# Status
-status_label = tk.Label(root, text=DEFAULT_STATUS, bg=BACKGROUND_COLOR,
-                        fg=TEXT_COLOR, font=("Arial", 12), justify=tk.CENTER)
-status_label.pack(pady=(0, 10))
-
 def update_status_wrap(event=None):
     width = event.width if event else root.winfo_width()
     status_label.config(wraplength=max(240, width - 20))
-
-root.bind("<Configure>", update_status_wrap)
 
 # Playback controls
 def stop():
@@ -474,17 +477,6 @@ def toggle_loop():
         loop_mode = "none"
         set_status("Loop: Off")
 
-# Instrument selection
-instrument_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-instrument_frame.pack(pady=5, padx=10, fill=tk.X)
-
-tk.Label(instrument_frame, text="Instrument:", bg=BACKGROUND_COLOR, fg=TEXT_COLOR).pack(anchor="w")
-
-instrument_var = tk.StringVar(value=DEFAULT_INSTRUMENT)
-instrument_box = ttk.Combobox(instrument_frame, textvariable=instrument_var, width=35, 
-                               values=list(INSTRUMENTS.keys()), state="readonly")
-instrument_box.pack(fill=tk.X, pady=(2, 5))
-
 def on_instrument_change(event=None):
     global current_instrument, player
     current_instrument = instrument_var.get()
@@ -493,60 +485,6 @@ def on_instrument_change(event=None):
         player.set_layout_and_instrument(current_layout, current_instrument)
     set_status(f"Instrument: {current_instrument}")
     save_instrument()
-
-instrument_box.bind("<<ComboboxSelected>>", on_instrument_change)
-
-# Buttons
-btn_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-btn_frame.pack(pady=5)
-
-file_buttons = [
-    (FILE_BUTTONS["load_midi"], load_midi),
-    (FILE_BUTTONS["delete_selected"], delete_selected),
-]
-
-for i, (text, cmd) in enumerate(file_buttons):
-    tk.Button(btn_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=14).grid(row=0, column=i, padx=4, pady=3)
-
-# Playback controls frame
-playback_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-playback_frame.pack(pady=5)
-
-playback_buttons = [
-    (PLAYBACK_BUTTONS["previous"], skip_previous),
-    (PLAYBACK_BUTTONS["play_selected"], play_selected),
-    (PLAYBACK_BUTTONS["play_playlist"], play_playlist),
-    (PLAYBACK_BUTTONS["pause_resume"], pause_resume),
-    (PLAYBACK_BUTTONS["stop"], stop),
-    (PLAYBACK_BUTTONS["next"], skip_next),
-]
-
-for i, (text, cmd) in enumerate(playback_buttons):
-    tk.Button(playback_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
-
-# Loop controls frame
-loop_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-loop_frame.pack(pady=5)
-
-loop_buttons = [
-    (PLAYBACK_BUTTONS["loop"], toggle_loop)
-]
-
-for i, (text, cmd) in enumerate(loop_buttons):
-    tk.Button(loop_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
-
-tk.Button(loop_frame, text=PLAYBACK_BUTTONS["musical_chairs"], command=play_musical_chairs,
-          bg=BUTTON_COLOR, fg=TEXT_COLOR, width=14).grid(row=0, column=1, padx=2, pady=3)
-
-# Footer
-tk.Frame(root, bg=SEPARATOR_COLOR, height=1).pack(fill=tk.X, pady=10)
-
-footer = tk.Frame(root, bg=BACKGROUND_COLOR)
-footer.pack(fill=tk.X, padx=10)
-
-tk.Label(footer, text=APP_VERSION, fg=FOOTER_TEXT_COLOR, bg=BACKGROUND_COLOR).pack(side=tk.LEFT)
-# tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),
-#           bg="#333333", fg="white").pack(side=tk.RIGHT)
 
 # Saving songs
 def save_playlist():
@@ -560,7 +498,10 @@ def load_saved_playlist():
         set_status(f"{len(playlist)} files loaded")
 
 def save_layout():
-    save_layout_settings(current_layout, current_instrument)
+    try:
+        save_layout_settings(current_layout, current_instrument)
+    except TimeoutError:
+        set_status(SETTINGS_SAVE_WARNING)
 
 def load_layout():
     global current_layout, current_instrument
@@ -570,11 +511,121 @@ def load_layout():
 def save_instrument():
     save_layout()  # Save both layout and instrument together
 
-# Init
-load_layout()
-instrument_var.set(current_instrument)
-player = KeyboardPlayer(layout=current_layout, instrument=current_instrument)
-load_saved_playlist()
 
-root.mainloop()
+def main():
+    global root, playlist_box, status_label, instrument_var, player, conversion_ui
+    from conversion_ui import ConversionUI
 
+    # Tk setup
+    root = tk.Tk()
+    root.title(APP_TITLE)
+    root.geometry(WINDOW_SIZE)
+    root.minsize(350, 500)
+    root.configure(bg=BACKGROUND_COLOR)
+
+    # Title
+    title_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
+    title_frame.pack(pady=(10, 2))
+
+    tk.Label(title_frame, text=APP_TITLE, fg=TEXT_COLOR,
+             bg=BACKGROUND_COLOR, font=("Arial", 20, "bold")).pack()
+    tk.Label(title_frame, text=APP_CREDIT, fg=MUTED_TEXT_COLOR,
+             bg=BACKGROUND_COLOR, font=("Arial", 10)).pack()
+
+    # Playlist
+    playlist_box = tk.Listbox(root, bg=PANEL_COLOR, fg=TEXT_COLOR,
+                              selectbackground=SELECTION_COLOR, font=("Arial", 12), exportselection=False)
+    playlist_box.pack(fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+
+    playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
+
+    # Status
+    status_label = tk.Label(root, text=DEFAULT_STATUS, bg=BACKGROUND_COLOR,
+                            fg=TEXT_COLOR, font=("Arial", 12), justify=tk.CENTER)
+    status_label.pack(pady=(0, 10))
+
+    root.bind("<Configure>", update_status_wrap)
+
+    # Instrument selection
+    instrument_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
+    instrument_frame.pack(pady=5, padx=10, fill=tk.X)
+
+    tk.Label(instrument_frame, text="Instrument:", bg=BACKGROUND_COLOR, fg=TEXT_COLOR).pack(anchor="w")
+
+    instrument_var = tk.StringVar(value=DEFAULT_INSTRUMENT)
+    instrument_box = ttk.Combobox(instrument_frame, textvariable=instrument_var, width=35,
+                                   values=list(INSTRUMENTS.keys()), state="readonly")
+    instrument_box.pack(fill=tk.X, pady=(2, 5))
+
+    instrument_box.bind("<<ComboboxSelected>>", on_instrument_change)
+
+    # Buttons
+    conversion_ui = ConversionUI(root, add_converted_midi, set_status)
+    btn_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
+    btn_frame.pack(pady=5)
+
+    file_buttons = [
+        (FILE_BUTTONS["load_midi"], load_midi),
+        (FILE_BUTTONS["delete_selected"], delete_selected),
+    ]
+
+    for i, (text, cmd) in enumerate(file_buttons):
+        tk.Button(btn_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=10).grid(row=0, column=i, padx=4, pady=3)
+    convert_button = tk.Button(btn_frame, text=FILE_BUTTONS["convert_audio"], command=conversion_ui.open,
+                               bg=BUTTON_COLOR, fg=TEXT_COLOR, width=12)
+    convert_button.grid(row=0, column=2, padx=4, pady=3)
+    conversion_ui.attach_button(convert_button)
+
+    # Playback controls frame
+    playback_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
+    playback_frame.pack(pady=5)
+
+    playback_buttons = [
+        (PLAYBACK_BUTTONS["previous"], skip_previous),
+        (PLAYBACK_BUTTONS["play_selected"], play_selected),
+        (PLAYBACK_BUTTONS["play_playlist"], play_playlist),
+        (PLAYBACK_BUTTONS["pause_resume"], pause_resume),
+        (PLAYBACK_BUTTONS["stop"], stop),
+        (PLAYBACK_BUTTONS["next"], skip_next),
+    ]
+
+    for i, (text, cmd) in enumerate(playback_buttons):
+        tk.Button(playback_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
+
+    # Loop controls frame
+    loop_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
+    loop_frame.pack(pady=5)
+
+    loop_buttons = [
+        (PLAYBACK_BUTTONS["loop"], toggle_loop)
+    ]
+
+    for i, (text, cmd) in enumerate(loop_buttons):
+        tk.Button(loop_frame, text=text, command=cmd, bg=BUTTON_COLOR, fg=TEXT_COLOR, width=6).grid(row=0, column=i, padx=2, pady=3)
+
+    tk.Button(loop_frame, text=PLAYBACK_BUTTONS["musical_chairs"], command=play_musical_chairs,
+              bg=BUTTON_COLOR, fg=TEXT_COLOR, width=14).grid(row=0, column=1, padx=2, pady=3)
+
+    # Footer
+    tk.Frame(root, bg=SEPARATOR_COLOR, height=1).pack(fill=tk.X, pady=10)
+
+    footer = tk.Frame(root, bg=BACKGROUND_COLOR)
+    footer.pack(fill=tk.X, padx=10)
+
+    tk.Label(footer, text=APP_VERSION, fg=FOOTER_TEXT_COLOR, bg=BACKGROUND_COLOR).pack(side=tk.LEFT)
+    # tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),
+    #           bg="#333333", fg="white").pack(side=tk.RIGHT)
+
+    # Init
+    load_layout()
+    instrument_var.set(current_instrument)
+    player = KeyboardPlayer(layout=current_layout, instrument=current_instrument)
+    load_saved_playlist()
+
+    root.protocol("WM_DELETE_WINDOW", close_app)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+    main()

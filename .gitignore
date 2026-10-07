@@ -16,6 +16,10 @@ playlist.json
 
 # Local song library and exports
 songs/
+audio/
+
+# Section 0 verification MIDI outputs (test copies and logs live under build/)
+/SECTION0-*.mid
 
 # Editor and OS noise
 .idea/
@@ -23,3 +27,4 @@ songs/
 *.log
 Thumbs.db
 Desktop.ini
+.allium/

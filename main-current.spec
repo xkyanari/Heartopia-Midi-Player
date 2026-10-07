@@ -60,18 +60,33 @@ VSVersionInfo(
 
 from app_config import APP_VERSION
 
-exe_name = f"main-{APP_VERSION.removeprefix('v')}"
+import os
+
+# Release orchestration sets the variant in each isolated source copy. The
+# version-bump block above is intentionally unchanged and runs once per copy.
+variant = os.environ.get("HEARTOPIA_BUILD_VARIANT", "standard")
+if variant not in ("standard", "convert"):
+    raise RuntimeError("HEARTOPIA_BUILD_VARIANT must be standard or convert")
+exe_name = f"main-{APP_VERSION.removeprefix('v')}-{variant}"
+hiddenimports = ["psutil"]
+excludes = []
+if variant == "standard":
+    excludes = ["torch", "av", "numpy", "piano_transcription_inference",
+                "torchlibrosa", "librosa", "scipy", "numba", "llvmlite",
+                "sklearn", "matplotlib"]
+else:
+    hiddenimports += ["av", "numpy", "torch", "audioread", "piano_transcription_inference"]
 
 a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=excludes,
     noarchive=False,
     optimize=0,
 )

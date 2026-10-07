@@ -17,6 +17,7 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 * Supports **15-key** and **22-key** layouts
 * Playlist persistence (remembers loaded MIDI files and instrument selection between sessions)
 * Simple GUI with playback controls
+* **Local solo-piano audio to MIDI conversion** (optional source dependencies or the conversion-enabled EXE)
 * **Musical Chairs mode**: randomly plays one bounded 15-25 second excerpt, then stops without an end buffer
 * **Auto-focus** to Heartopia window on play
 * **Auto-pause** when switching away from Heartopia
@@ -122,6 +123,73 @@ You can now select different instruments when playing MIDI files. Each instrumen
 pip install mido keyboard
 ```
 
+## Convert solo piano audio to MIDI
+
+Use **Convert Audio** to open the **Convert Piano Audio to MIDI…** dialog.
+This works best with **solo piano recordings**; mixed songs, vocals and other
+instruments give poor results. Audio stays on your computer.
+
+The dialog lists WAV, FLAC, MP3, OGG and M4A files in the `audio` folder next to
+the app (next to `main.py` when running from source). It creates this folder if
+missing. **Change folder…** saves another location; **Browse…** picks a file
+anywhere. The list is non-recursive and marks matching `.mid` files.
+Use **Refresh** after adding or removing audio; nothing converts automatically.
+
+Select one file and click **Convert**. CPU transcription takes roughly 1–2×
+the song length, plus library/model startup time. The bar is indeterminate
+during transcription, with elapsed time and an approximate 1.5× estimate.
+**Cancel** stops the worker during decoding, model loading/downloading or
+transcription. Closing the app also stops it and cleans its temporary files.
+The default maximum input length is 20 minutes.
+
+The MIDI is saved beside the source, adding ` (1)`, ` (2)`, etc. on collisions.
+If that directory is not writable, output falls back to
+`%LOCALAPPDATA%\Heartopia-Midi-Player\converted` (or the `converted_output_dir`
+setting). It is added to the playlist; automatic selection happens only when
+playback is fully stopped, including no paused session or queued transition.
+Sustain pedal **CC64 is preserved in the MIDI**, but is **not audible during
+in-app/game playback**.
+
+### Model download and offline use
+
+The model is not bundled. First use asks before downloading approximately
+**172 MB (164 MiB)** into
+`%LOCALAPPDATA%\Heartopia-Midi-Player\models`. Download progress and Cancel are
+available. Later conversions reuse the validated checkpoint.
+
+**Choose model file…** validates an existing checkpoint for offline use.
+**Re-download model** downloads to a new file, validates it, then changes the
+saved path. Manually supplied/unowned files are never deleted or overwritten.
+No trusted upstream hash was found in the package source; validation uses the
+audited size plus a successful model load. Microsoft Store Python can redirect
+app-data storage; when moving from source to an EXE, choose the existing cached
+file from its actual location if it is not found automatically.
+
+### Source installation with conversion
+
+Use Windows x64 and Python 3.12. The pinned conversion dependencies include CPU
+PyTorch, PyAV and `audioread==3.1.0`; no system FFmpeg or Hugging Face token is
+needed.
+
+```powershell
+py -3.12 -m venv .venv
+& .\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-convert.txt
+& .\.venv\Scripts\python.exe .\main.py
+```
+
+For playback only, install just `requirements.txt`. The conversion action will
+show installation instructions if its optional dependencies are absent.
+
+### Windows EXE variants
+
+| Artifact | Contents |
+| --- | --- |
+| `main-0.4.9-standard.exe` | MIDI playback; no torch or PyAV. Convert explains that it requires the conversion-enabled build. |
+| `main-0.4.9-convert.exe` | MIDI playback plus local CPU transcription and bundled audio decoding. Model downloads separately on first use. |
+
+Neither EXE needs Python, a venv or a system FFmpeg installation. Installing
+packages with pip cannot add conversion to an already-built standard EXE.
+
 ---
 
 ## How to Run
@@ -145,13 +213,25 @@ pip install -r requirements.txt
 python main.py
 ```
 
-To build a Windows executable, run this from the project folder:
+To build both Windows variants from one source snapshot, use Windows Python
+3.12 and run this from the project folder:
 
 ```powershell
-python -m PyInstaller --clean --noconfirm main-current.spec
+python tools/build_release.py build
 ```
 
-Each build automatically increments the patch version and creates a new executable in `dist`, such as `main-0.4.1.exe` and then `main-0.4.2.exe`. The app footer and Windows file version metadata are updated to match.
+The wrapper creates two clean venvs and two identical isolated source copies
+under `build/`. Each copy runs the spec's unchanged patch-version bump once;
+both EXEs have the same resulting version and `-standard` / `-convert` suffixes.
+Artifacts go to `dist/`; logs, source hashes, sizes and hashes go to the generated
+`release.json`. After frozen checks, record that version in the workspace once:
+
+```powershell
+python tools/build_release.py record build/release-YYYYMMDD-HHMMSS/release.json
+```
+
+Update the CHANGELOG for that version. Running the spec directly still bumps
+its checkout on every invocation, so use the wrapper for paired releases.
 
 4. **Using the app:**
 
