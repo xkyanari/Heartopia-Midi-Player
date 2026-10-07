@@ -3,6 +3,9 @@ from tkinter import filedialog, messagebox, ttk
 import multiprocessing
 import os
 import random
+import math
+import mido
+from playback_timing import PlaybackClock, format_time
 from ui_theme import MidiVisualizer, button, style_combobox
 
 from app_storage import (
@@ -62,6 +65,68 @@ is_paused = False
 focus_check_id = None
 now_playing_label = None
 visualizer = None
+time_label = None
+progress_bar = None
+playback_clock = None
+time_update_id = None
+
+
+def resize_progress(event=None):
+    clock = playback_clock
+    fraction = clock.position() / clock.duration if clock and clock.duration else 0
+    progress_bar.coords("played", 0, 0, progress_bar.winfo_width() * fraction, 4)
+
+
+def update_playback_time():
+    global time_update_id
+    time_update_id = None
+    if time_label is None:
+        return
+    clock = playback_clock
+    position = clock.position() if clock else 0
+    duration = clock.duration if clock else 0
+    remaining = math.ceil(clock.remaining()) if clock else 0
+    time_label.config(text=f"{format_time(position)} / {format_time(duration)}  ·  {format_time(remaining)} left")
+    resize_progress()
+    if clock and clock.remaining() > 0:
+        time_update_id = root.after(200, update_playback_time)
+
+
+def append_playlist_song(path):
+    # Invalid files stay removable in the library and report errors when played.
+    try:
+        duration = mido.MidiFile(path).length
+    except Exception:
+        duration = None
+    name = os.path.basename(path)
+    playlist.append({"name": name, "path": path, "duration": duration})
+    length = format_time(duration) if duration is not None else "--:--"
+    playlist_box.insert(tk.END, f"{name}  ·  {length}")
+
+
+def activate_playlist_song(event=None):
+    on_playlist_select(event)
+    if playlist_box.curselection():
+        play_selected()
+    return "break"
+
+
+def schedule_song_end(seconds, callback):
+    """Keep queue/loop transitions on the same pause-aware clock as the UI."""
+    clock = playback_clock
+    generation = playback_gen
+
+    def check():
+        if generation != playback_gen or clock is None:
+            return
+        remaining = seconds - clock.elapsed()
+        if is_paused or remaining > 0:
+            delay = PAUSE_POLL_INTERVAL_MS if is_paused else max(1, math.ceil(remaining * 1000))
+            playback_after_ids.append(root.after(delay, check))
+        else:
+            callback()
+
+    check()
 
 def switch_to_player():
     """Switch focus to the MIDI player window."""
@@ -102,6 +167,12 @@ playback_gen = 0
 musical_chairs_run_id = 0
 def cancel_playback():
     global playback_active, playback_after_ids, pressed_keys, focus_check_id
+    global playback_clock, time_update_id
+    if time_update_id is not None:
+        root.after_cancel(time_update_id)
+        time_update_id = None
+    playback_clock = None
+    update_playback_time()
     playback_active = False
     global playback_gen
     playback_gen += 1
@@ -140,8 +211,7 @@ def is_playback_fully_stopped():
 def add_converted_midi(path):
     global current_index
     idle = is_playback_fully_stopped()
-    playlist.append({"name": os.path.basename(path), "path": path})
-    playlist_box.insert(tk.END, os.path.basename(path))
+    append_playlist_song(path)
     if idle:
         current_index = len(playlist) - 1
         playlist_box.select_clear(0, tk.END)
@@ -160,20 +230,31 @@ def close_app():
     stop()
     conversion_ui.shutdown()
 
-def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=None):
+def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=None, duration=None):
     """Play `events` (list of (delay, notes)) using tkinter `after` scheduling.
     This avoids background threads and can be cancelled with `cancel_playback()`.
     """
     global playback_active, playback_after_ids, pressed_keys
+    global playback_clock
     cancel_playback()
     playback_active = True
     playback_after_ids = []
     pressed_keys = []
+    if duration is None:
+        onset = 0
+        duration = 0
+        for delay, notes in events:
+            onset += delay
+            duration = max(duration, onset + max((note[2] / 1000 for note in notes), default=0))
+    playback_clock = PlaybackClock(duration, speed=speed, delay=PLAYBACK_START_DELAY_MS / 1000)
+    update_playback_time()
     set_now_playing(song_name if events else None)
     all_notes_played = False
     global playback_gen
     playback_gen += 1
     my_gen = playback_gen
+    clock = playback_clock
+    event_time = 0.0
 
     def release_keys(keys):
         for k in keys:
@@ -213,9 +294,12 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
         return min(max_sustain, duration_ms)
 
     def play_note_index(i):
+        nonlocal event_time
         if not playback_active or i >= len(events):
             return
         delay, notes = events[i]
+        event_time += delay / speed
+        target_time = event_time
 
         def do_notes():
             nonlocal all_notes_played
@@ -225,6 +309,13 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
             # If paused, do not progress; keep checking until resumed.
             if is_paused:
                 rid = root.after(PAUSE_POLL_INTERVAL_MS, do_notes)
+                playback_after_ids.append(rid)
+                return
+
+            # Pausing during a gap must preserve the remaining note delay.
+            remaining = target_time - clock.elapsed()
+            if remaining > 0.001:
+                rid = root.after(max(1, math.ceil(remaining * 1000)), do_notes)
                 playback_after_ids.append(rid)
                 return
 
@@ -307,8 +398,7 @@ def load_midi():
     if not files:
         return
     for path in files:
-        playlist.append({"name": os.path.basename(path), "path": path})
-        playlist_box.insert(tk.END, os.path.basename(path))
+        append_playlist_song(path)
     set_status(f"{len(playlist)} files loaded")
     save_playlist()
 
@@ -341,30 +431,31 @@ def play_selected():
         return
     set_status(f"Playing: {playlist[current_index]['name']}")
     start_playback(events, on_key_press=highlight_keys,
-                   song_name=playlist[current_index]["name"])
+                   song_name=playlist[current_index]["name"], duration=duration)
     if switch_to_heartopia():  # Switch to Heartopia window for key presses
         root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
     
     # If loop one is enabled, schedule replay after song ends
     if loop_mode == "one":
-        wait_time = int((duration + SONG_END_BUFFER_SECONDS) * 1000)
-        aid = root.after(wait_time, lambda: play_selected())
-        playback_after_ids.append(aid)
+        schedule_song_end(duration + SONG_END_BUFFER_SECONDS, play_selected)
 
 def play_playlist():
     global loop_mode
     stop()
     def play_next(idx):
+        global current_index
         if idx >= len(playlist):
-            if loop_mode == "all":
+            if loop_mode == "all" and playlist:
                 play_next(0)  # Loop back to start
             else:
                 set_status("Playlist finished")
             return
         
+        current_index = idx
         playlist_box.select_clear(0, tk.END)
         playlist_box.select_set(idx)
         playlist_box.activate(idx)
+        playlist_box.see(idx)
         try:
             events, duration = parse_midi(playlist[idx]["path"])
         except Exception as e:
@@ -372,13 +463,11 @@ def play_playlist():
             play_next(idx+1)
             return
         set_status(f"Playing: {playlist[idx]['name']}")
-        start_playback(events, on_key_press=highlight_keys, song_name=playlist[idx]["name"])
+        start_playback(events, on_key_press=highlight_keys, song_name=playlist[idx]["name"], duration=duration)
         if switch_to_heartopia():  # Switch to Heartopia window for key presses
             root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
         # Schedule next song with duration + 6 second buffer
-        wait_time = int((duration + SONG_END_BUFFER_SECONDS) * 1000)
-        aid = root.after(wait_time, lambda: play_next(idx+1))
-        playback_after_ids.append(aid)
+        schedule_song_end(duration + SONG_END_BUFFER_SECONDS, lambda: play_next(idx+1))
     play_next(current_index or 0)
 
 def play_musical_chairs():
@@ -415,18 +504,16 @@ def play_musical_chairs():
         excerpt_events, excerpt_duration = create_random_excerpt(events, duration)
         set_status(f"Playing: {playlist[current_index]['name']}")
         start_playback(excerpt_events, on_key_press=highlight_keys,
-                       song_name=playlist[current_index]["name"])
+                       song_name=playlist[current_index]["name"], duration=excerpt_duration)
         if switch_to_heartopia():
             root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
 
-        wait_time = int(excerpt_duration * 1000) + PLAYBACK_START_DELAY_MS
         def finish_musical_chairs():
             if run_id == musical_chairs_run_id:
                 cancel_playback()
                 set_status("Musical Chairs finished")
 
-        aid = root.after(wait_time, finish_musical_chairs)
-        playback_after_ids.append(aid)
+        schedule_song_end(excerpt_duration, finish_musical_chairs)
 
     play_excerpt()
 
@@ -436,6 +523,11 @@ def pause_resume():
         messagebox.showinfo("Pause", "No playback to pause")
         return
     is_paused = not is_paused
+    if playback_clock is not None:
+        if is_paused:
+            playback_clock.pause()
+        else:
+            playback_clock.resume()
     highlight_keys(pressed_keys)
     if is_paused:
         set_status("Paused")
@@ -455,6 +547,7 @@ def skip_next():
     playlist_box.select_clear(0, tk.END)
     playlist_box.select_set(current_index)
     playlist_box.activate(current_index)
+    playlist_box.see(current_index)
     play_selected()
 
 def skip_previous():
@@ -468,6 +561,7 @@ def skip_previous():
     playlist_box.select_clear(0, tk.END)
     playlist_box.select_set(current_index)
     playlist_box.activate(current_index)
+    playlist_box.see(current_index)
     play_selected()
 
 def toggle_loop_one():
@@ -518,8 +612,7 @@ def save_playlist():
 
 def load_saved_playlist():
     for path in load_playlist_paths():
-        playlist.append({"name": os.path.basename(path), "path": path})
-        playlist_box.insert(tk.END, os.path.basename(path))
+        append_playlist_song(path)
     if playlist:
         set_status(f"{len(playlist)} files loaded")
 
@@ -540,7 +633,7 @@ def save_instrument():
 
 def main():
     global root, playlist_box, status_label, instrument_var, player, conversion_ui
-    global now_playing_label, visualizer
+    global now_playing_label, visualizer, time_label, progress_bar
     from conversion_ui import ConversionUI
 
     # Tk setup
@@ -578,6 +671,15 @@ def main():
                             fg=MUTED_TEXT_COLOR, font=UI_FONT, justify=tk.LEFT,
                             anchor="w", wraplength=260)
     status_label.pack(fill=tk.X, pady=(4, 0))
+
+    time_label = tk.Label(track_info, text="0:00 / 0:00  ·  0:00 left", bg=PANEL_COLOR,
+                         fg=MUTED_TEXT_COLOR, font=UI_FONT, anchor="w")
+    time_label.pack(fill=tk.X, pady=(4, 0))
+    progress_bar = tk.Canvas(track_info, height=4, bg=SEPARATOR_COLOR,
+                             highlightthickness=0, bd=0)
+    progress_bar.create_rectangle(0, 0, 0, 4, fill=ACCENT_COLOR, outline="", tags="played")
+    progress_bar.pack(fill=tk.X, pady=(3, 4))
+    progress_bar.bind("<Configure>", resize_progress)
 
     root.bind("<Configure>", update_status_wrap)
 
@@ -632,15 +734,22 @@ def main():
     # Library card grows with the window while transport stays at the top.
     playlist_card = tk.Frame(root, bg=CARD_COLOR, bd=0)
     playlist_card.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
-    tk.Label(playlist_card, text="YOUR PLAYLIST", bg=CARD_COLOR, anchor="w",
+    tk.Label(playlist_card, text="YOUR PLAYLIST · Double-click or Enter to play", bg=CARD_COLOR, anchor="w",
              fg=MUTED_TEXT_COLOR, font=UI_FONT).pack(fill=tk.X, padx=10, pady=8)
-    playlist_box = tk.Listbox(playlist_card, bg=PANEL_COLOR, fg=TEXT_COLOR,
+    library = tk.Frame(playlist_card, bg=CARD_COLOR)
+    library.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
+    playlist_box = tk.Listbox(library, bg=PANEL_COLOR, fg=TEXT_COLOR,
                               selectbackground=SELECTION_COLOR, selectforeground=TEXT_COLOR,
                               font=PLAYLIST_FONT, exportselection=False, height=5,
                               highlightthickness=1, highlightbackground=SEPARATOR_COLOR,
                               highlightcolor=ACCENT_COLOR, bd=0, relief=tk.FLAT, activestyle="none")
-    playlist_box.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
+    scrollbar = tk.Scrollbar(library, orient=tk.VERTICAL, command=playlist_box.yview)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    playlist_box.config(yscrollcommand=scrollbar.set)
+    playlist_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
     playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
+    playlist_box.bind("<Double-Button-1>", activate_playlist_song)
+    playlist_box.bind("<Return>", activate_playlist_song)
 
     btn_frame = tk.Frame(playlist_card, bg=CARD_COLOR)
     btn_frame.pack(pady=(0, 4))
