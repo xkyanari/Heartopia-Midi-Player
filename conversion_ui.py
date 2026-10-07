@@ -132,7 +132,7 @@ class ConvertDialog:
                 "sticky": "nswe", "children": [("Treeheading.text", {"sticky": "we"})]})]})])
         style.configure("Conversion.Treeview", background=config.PANEL_COLOR,
                         fieldbackground=config.PANEL_COLOR, foreground=config.TEXT_COLOR)
-        style.configure("Conversion.Treeview.Heading", background=config.BUTTON_COLOR, foreground=config.TEXT_COLOR)
+        style.configure("Conversion.Treeview.Heading", background=config.BUTTON_COLOR, foreground=config.BUTTON_TEXT_COLOR)
         style.map("Conversion.Treeview", background=[("selected", config.SELECTION_COLOR)],
                   foreground=[("selected", config.TEXT_COLOR)])
         table = tk.Frame(self.window, bg=config.BACKGROUND_COLOR)
@@ -169,7 +169,7 @@ class ConvertDialog:
 
     def button(self, parent, text, command, busy_enabled=False):
         button = tk.Button(parent, text=text, command=command, bg=config.BUTTON_COLOR,
-                           fg=config.TEXT_COLOR, disabledforeground=config.MUTED_TEXT_COLOR)
+                           fg=config.BUTTON_TEXT_COLOR, disabledforeground=config.FOOTER_TEXT_COLOR)
         if not busy_enabled:
             self.controls.append(button)
         return button

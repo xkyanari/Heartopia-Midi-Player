@@ -24,6 +24,7 @@ from app_config import (
     DEFAULT_INSTRUMENT,
     DEFAULT_LAYOUT,
     DEFAULT_STATUS,
+    DISPLAY_FONT,
     FILE_BUTTONS,
     FOCUS_CHECK_INTERVAL_MS,
     FOOTER_TEXT_COLOR,
@@ -40,7 +41,6 @@ from app_config import (
     PLAYBACK_START_DELAY_MS,
     SELECTION_COLOR,
     SETTINGS_SAVE_WARNING,
-    SEPARATOR_COLOR,
     SONG_END_BUFFER_SECONDS,
     TEXT_COLOR,
     TITLE_FONT,
@@ -271,8 +271,9 @@ def on_playlist_select(event):
         current_index = sel[0]
 
 def update_status_wrap(event=None):
-    width = event.width if event else root.winfo_width()
-    status_label.config(wraplength=max(240, width - 20))
+    # Toplevel bindings also receive child Configure events.
+    width = root.winfo_width()
+    status_label.config(wraplength=max(240, width - 48))
 
 # Playback controls
 def stop():
@@ -525,71 +526,50 @@ def main():
     root = tk.Tk()
     root.title(APP_TITLE)
     root.geometry(WINDOW_SIZE)
-    root.minsize(380, 580)
+    root.minsize(430, 440)
     root.configure(bg=BACKGROUND_COLOR)
     root.option_add("*Font", UI_FONT)
     style_combobox(root)
 
-    # Title
-    title_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    title_frame.pack(pady=(20, 6))
+    # Compact, beveled player deck above a separate playlist panel.
+    deck = tk.Frame(root, bg=CARD_COLOR, relief=tk.RAISED, bd=2)
+    deck.pack(fill=tk.X, padx=8, pady=(8, 4))
+    title_frame = tk.Frame(deck, bg=BACKGROUND_COLOR)
+    title_frame.pack(fill=tk.X, padx=4, pady=4)
+    tk.Label(title_frame, text=APP_TITLE.upper(), fg=MUTED_TEXT_COLOR,
+             bg=BACKGROUND_COLOR, font=TITLE_FONT).pack(pady=2)
 
-    tk.Label(title_frame, text=APP_TITLE, fg=TEXT_COLOR,
-             bg=BACKGROUND_COLOR, font=TITLE_FONT).pack()
-    tk.Label(title_frame, text=APP_CREDIT, fg=MUTED_TEXT_COLOR,
-             bg=BACKGROUND_COLOR, font=UI_FONT).pack(pady=(4, 0))
-
-    # Playlist
-    playlist_card = tk.Frame(root, bg=CARD_COLOR, padx=12, pady=12)
-    playlist_card.pack(fill=tk.BOTH, expand=True, padx=16, pady=(10, 8))
-    playlist_box = tk.Listbox(playlist_card, bg=PANEL_COLOR, fg=TEXT_COLOR,
-                              selectbackground=SELECTION_COLOR, selectforeground=TEXT_COLOR,
-                              font=PLAYLIST_FONT, exportselection=False,
-                              highlightthickness=0, bd=0, activestyle="none")
-    playlist_box.pack(fill=tk.BOTH, expand=True)
-
-    playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
-
-    # Status
-    status_label = tk.Label(root, text=DEFAULT_STATUS, bg=BACKGROUND_COLOR,
-                            fg=MUTED_TEXT_COLOR, font=UI_FONT, justify=tk.CENTER)
-    status_label.pack(fill=tk.X, padx=16, pady=(0, 8))
+    display = tk.Frame(deck, bg=PANEL_COLOR, relief=tk.SUNKEN, bd=2)
+    display.pack(fill=tk.X, padx=8, pady=(4, 6))
+    tk.Label(display, text="MIDI • HEARTOPIA", bg=PANEL_COLOR,
+             fg=FOOTER_TEXT_COLOR, font=UI_FONT, anchor="w").pack(fill=tk.X, padx=6, pady=(4, 0))
+    status_label = tk.Label(display, text=DEFAULT_STATUS, bg=PANEL_COLOR,
+                            fg=TEXT_COLOR, font=DISPLAY_FONT, justify=tk.LEFT,
+                            anchor="w", wraplength=382)
+    status_label.pack(fill=tk.X, padx=6, pady=(3, 6))
 
     root.bind("<Configure>", update_status_wrap)
 
     # Instrument selection
-    instrument_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    instrument_frame.pack(pady=5, padx=16, fill=tk.X)
+    instrument_frame = tk.Frame(deck, bg=CARD_COLOR)
+    instrument_frame.pack(pady=(0, 4), padx=8, fill=tk.X)
 
-    tk.Label(instrument_frame, text="Instrument", bg=BACKGROUND_COLOR, fg=MUTED_TEXT_COLOR).pack(anchor="w")
+    tk.Label(instrument_frame, text="INSTRUMENT", bg=CARD_COLOR,
+             fg=MUTED_TEXT_COLOR).pack(side=tk.LEFT, padx=(0, 8))
 
     instrument_var = tk.StringVar(value=DEFAULT_INSTRUMENT)
     instrument_box = ttk.Combobox(instrument_frame, textvariable=instrument_var, width=35,
                                    values=list(INSTRUMENTS.keys()), state="readonly",
                                    style="Player.TCombobox", font=UI_FONT)
-    instrument_box.pack(fill=tk.X, pady=(2, 5))
+    instrument_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     instrument_box.bind("<<ComboboxSelected>>", on_instrument_change)
 
-    # Buttons
     conversion_ui = ConversionUI(root, add_converted_midi, set_status)
-    btn_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    btn_frame.pack(pady=5)
-
-    file_buttons = [
-        (FILE_BUTTONS["load_midi"], load_midi),
-        (FILE_BUTTONS["delete_selected"], delete_selected),
-    ]
-
-    for i, (text, cmd) in enumerate(file_buttons):
-        button(btn_frame, text, cmd, width=9).grid(row=0, column=i, padx=4, pady=3)
-    convert_button = button(btn_frame, FILE_BUTTONS["convert_audio"], conversion_ui.open, width=12)
-    convert_button.grid(row=0, column=2, padx=4, pady=3)
-    conversion_ui.attach_button(convert_button)
 
     # Playback controls frame
-    playback_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    playback_frame.pack(pady=5)
+    playback_frame = tk.Frame(deck, bg=CARD_COLOR)
+    playback_frame.pack(pady=(0, 3))
 
     playback_buttons = [
         (PLAYBACK_BUTTONS["previous"], skip_previous),
@@ -602,11 +582,11 @@ def main():
 
     for i, (text, cmd) in enumerate(playback_buttons):
         button(playback_frame, text, cmd, accent=cmd is play_selected,
-               width=3, font=TRANSPORT_FONT).grid(row=0, column=i, padx=3, pady=3)
+               width=3, font=TRANSPORT_FONT).grid(row=0, column=i, padx=2, pady=2)
 
     # Loop controls frame
-    loop_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
-    loop_frame.pack(pady=5)
+    loop_frame = tk.Frame(deck, bg=CARD_COLOR)
+    loop_frame.pack(pady=(0, 5))
 
     loop_buttons = [
         (PLAYBACK_BUTTONS["loop"], toggle_loop)
@@ -618,13 +598,37 @@ def main():
     button(loop_frame, PLAYBACK_BUTTONS["musical_chairs"], play_musical_chairs,
            width=16).grid(row=0, column=1, padx=4, pady=3)
 
-    # Footer
-    tk.Frame(root, bg=SEPARATOR_COLOR, height=1).pack(fill=tk.X, padx=16, pady=(12, 8))
+    # Playlist: recessed green-on-black list, with file actions along its edge.
+    playlist_card = tk.Frame(root, bg=CARD_COLOR, relief=tk.RAISED, bd=2)
+    playlist_card.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+    tk.Label(playlist_card, text="PLAYLIST", bg=BACKGROUND_COLOR,
+             fg=MUTED_TEXT_COLOR, font=TITLE_FONT).pack(fill=tk.X, padx=4, pady=4)
+    playlist_box = tk.Listbox(playlist_card, bg=PANEL_COLOR, fg=TEXT_COLOR,
+                              selectbackground=SELECTION_COLOR, selectforeground=TEXT_COLOR,
+                              font=PLAYLIST_FONT, exportselection=False, height=5,
+                              highlightthickness=0, bd=2, relief=tk.SUNKEN, activestyle="none")
+    playlist_box.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
+    playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
 
+    btn_frame = tk.Frame(playlist_card, bg=CARD_COLOR)
+    btn_frame.pack(pady=(0, 4))
+    file_buttons = [
+        (FILE_BUTTONS["load_midi"], load_midi),
+        (FILE_BUTTONS["delete_selected"], delete_selected),
+    ]
+    for i, (text, cmd) in enumerate(file_buttons):
+        button(btn_frame, text, cmd, width=9).grid(row=0, column=i, padx=3, pady=2)
+    convert_button = button(btn_frame, FILE_BUTTONS["convert_audio"], conversion_ui.open, width=12)
+    convert_button.grid(row=0, column=2, padx=3, pady=2)
+    conversion_ui.attach_button(convert_button)
+
+    # Footer
     footer = tk.Frame(root, bg=BACKGROUND_COLOR)
-    footer.pack(fill=tk.X, padx=16, pady=(0, 12))
+    footer.pack(fill=tk.X, padx=10, pady=(2, 6))
 
     tk.Label(footer, text=APP_VERSION, fg=FOOTER_TEXT_COLOR, bg=BACKGROUND_COLOR).pack(side=tk.LEFT)
+    tk.Label(footer, text=APP_CREDIT, fg=FOOTER_TEXT_COLOR,
+             bg=BACKGROUND_COLOR, font=("Tahoma", 8)).pack(side=tk.RIGHT)
     # tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),
     #           bg="#333333", fg="white").pack(side=tk.RIGHT)
 
