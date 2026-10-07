@@ -16,6 +16,7 @@ from keyboard_player import KeyboardPlayer, INSTRUMENTS
 from keyboard_layout import press_key, release_key
 from window_focus import get_foreground_window_title, switch_to_heartopia, switch_to_window
 from app_config import (
+    ACCENT_COLOR,
     APP_CREDIT,
     APP_TITLE,
     APP_VERSION,
@@ -40,6 +41,7 @@ from app_config import (
     PLAYBACK_SPEED,
     PLAYBACK_START_DELAY_MS,
     SELECTION_COLOR,
+    SEPARATOR_COLOR,
     SETTINGS_SAVE_WARNING,
     SONG_END_BUFFER_SECONDS,
     TEXT_COLOR,
@@ -272,8 +274,7 @@ def on_playlist_select(event):
 
 def update_status_wrap(event=None):
     # Toplevel bindings also receive child Configure events.
-    width = root.winfo_width()
-    status_label.config(wraplength=max(240, width - 48))
+    status_label.config(wraplength=max(120, status_label.winfo_width()))
 
 # Playback controls
 def stop():
@@ -524,29 +525,42 @@ def main():
 
     # Tk setup
     root = tk.Tk()
-    root.title(APP_TITLE)
+    root.title(f"{APP_TITLE} {APP_VERSION}")
     root.geometry(WINDOW_SIZE)
     root.minsize(430, 440)
     root.configure(bg=BACKGROUND_COLOR)
     root.option_add("*Font", UI_FONT)
     style_combobox(root)
 
-    # Compact, beveled player deck above a separate playlist panel.
-    deck = tk.Frame(root, bg=CARD_COLOR, relief=tk.RAISED, bd=2)
-    deck.pack(fill=tk.X, padx=8, pady=(8, 4))
-    title_frame = tk.Frame(deck, bg=BACKGROUND_COLOR)
-    title_frame.pack(fill=tk.X, padx=4, pady=4)
-    tk.Label(title_frame, text=APP_TITLE.upper(), fg=MUTED_TEXT_COLOR,
-             bg=BACKGROUND_COLOR, font=TITLE_FONT).pack(pady=2)
+    title_frame = tk.Frame(root, bg=BACKGROUND_COLOR)
+    title_frame.pack(fill=tk.X, padx=16, pady=(12, 8))
+    tk.Label(title_frame, text="HEARTOPIA", fg=TEXT_COLOR,
+             bg=BACKGROUND_COLOR, font=TITLE_FONT).pack(side=tk.LEFT)
+    tk.Label(title_frame, text="MIDI PLAYER", fg=ACCENT_COLOR,
+             bg=BACKGROUND_COLOR, font=UI_FONT).pack(side=tk.RIGHT)
 
-    display = tk.Frame(deck, bg=PANEL_COLOR, relief=tk.SUNKEN, bd=2)
-    display.pack(fill=tk.X, padx=8, pady=(4, 6))
-    tk.Label(display, text="MIDI • HEARTOPIA", bg=PANEL_COLOR,
-             fg=FOOTER_TEXT_COLOR, font=UI_FONT, anchor="w").pack(fill=tk.X, padx=6, pady=(4, 0))
-    status_label = tk.Label(display, text=DEFAULT_STATUS, bg=PANEL_COLOR,
+    # A flat player card with a decorative record beside the current status.
+    deck = tk.Frame(root, bg=CARD_COLOR, bd=0)
+    deck.pack(fill=tk.X, padx=12, pady=(0, 4))
+    tk.Frame(deck, bg=ACCENT_COLOR, height=2).pack(fill=tk.X)
+    display = tk.Frame(deck, bg=PANEL_COLOR, bd=0)
+    display.pack(fill=tk.X, padx=10, pady=(10, 8))
+    record = tk.Canvas(display, width=72, height=72, bg=PANEL_COLOR,
+                       highlightthickness=0, bd=0)
+    record.pack(side=tk.LEFT, padx=(8, 10), pady=8)
+    for inset in (2, 9, 16, 23):
+        record.create_oval(inset, inset, 72 - inset, 72 - inset,
+                           fill=BACKGROUND_COLOR, outline=SEPARATOR_COLOR)
+    record.create_oval(27, 27, 45, 45, fill=ACCENT_COLOR, outline=ACCENT_COLOR)
+    record.create_oval(34, 34, 38, 38, fill=PANEL_COLOR, outline=PANEL_COLOR)
+    track_info = tk.Frame(display, bg=PANEL_COLOR)
+    track_info.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+    tk.Label(track_info, text="NOW PLAYING", bg=PANEL_COLOR,
+             fg=ACCENT_COLOR, font=UI_FONT, anchor="w").pack(fill=tk.X)
+    status_label = tk.Label(track_info, text=DEFAULT_STATUS, bg=PANEL_COLOR,
                             fg=TEXT_COLOR, font=DISPLAY_FONT, justify=tk.LEFT,
-                            anchor="w", wraplength=382)
-    status_label.pack(fill=tk.X, padx=6, pady=(3, 6))
+                            anchor="w", wraplength=260)
+    status_label.pack(fill=tk.X, pady=(4, 0))
 
     root.bind("<Configure>", update_status_wrap)
 
@@ -598,15 +612,16 @@ def main():
     button(loop_frame, PLAYBACK_BUTTONS["musical_chairs"], play_musical_chairs,
            width=16).grid(row=0, column=1, padx=4, pady=3)
 
-    # Playlist: recessed green-on-black list, with file actions along its edge.
-    playlist_card = tk.Frame(root, bg=CARD_COLOR, relief=tk.RAISED, bd=2)
-    playlist_card.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
-    tk.Label(playlist_card, text="PLAYLIST", bg=BACKGROUND_COLOR,
-             fg=MUTED_TEXT_COLOR, font=TITLE_FONT).pack(fill=tk.X, padx=4, pady=4)
+    # Library card grows with the window while transport stays at the top.
+    playlist_card = tk.Frame(root, bg=CARD_COLOR, bd=0)
+    playlist_card.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
+    tk.Label(playlist_card, text="YOUR PLAYLIST", bg=CARD_COLOR, anchor="w",
+             fg=MUTED_TEXT_COLOR, font=UI_FONT).pack(fill=tk.X, padx=10, pady=8)
     playlist_box = tk.Listbox(playlist_card, bg=PANEL_COLOR, fg=TEXT_COLOR,
                               selectbackground=SELECTION_COLOR, selectforeground=TEXT_COLOR,
                               font=PLAYLIST_FONT, exportselection=False, height=5,
-                              highlightthickness=0, bd=2, relief=tk.SUNKEN, activestyle="none")
+                              highlightthickness=1, highlightbackground=SEPARATOR_COLOR,
+                              highlightcolor=ACCENT_COLOR, bd=0, relief=tk.FLAT, activestyle="none")
     playlist_box.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
     playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
 
@@ -628,7 +643,7 @@ def main():
 
     tk.Label(footer, text=APP_VERSION, fg=FOOTER_TEXT_COLOR, bg=BACKGROUND_COLOR).pack(side=tk.LEFT)
     tk.Label(footer, text=APP_CREDIT, fg=FOOTER_TEXT_COLOR,
-             bg=BACKGROUND_COLOR, font=("Tahoma", 8)).pack(side=tk.RIGHT)
+             bg=BACKGROUND_COLOR, font=("Segoe UI", 8)).pack(side=tk.RIGHT)
     # tk.Button(footer, text="Ko-fi", command=lambda: webbrowser.open("https://ko-fi.com/yukiokoito"),
     #           bg="#333333", fg="white").pack(side=tk.RIGHT)
 

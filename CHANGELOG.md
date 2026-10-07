@@ -2,6 +2,12 @@
 
 All notable changes to Heartopia MIDI Player are documented here.
 
+## 0.4.10 — 2026-10-07
+
+### Changed
+- Updated the player with flat midnight-blue panels, cyan accents, a decorative record graphic, and Segoe UI typography.
+- Updated the displayed version and Windows version metadata together; the title bar now also shows the version.
+
 ## 0.4.9 — 2026-09-28
 
 ### Added
