@@ -5,6 +5,34 @@ from tkinter import ttk
 import app_config as config
 
 
+class MidiVisualizer(tk.Canvas):
+    """Light pitch-group bars for held MIDI keys, without an animation timer."""
+
+    def __init__(self, parent):
+        super().__init__(parent, width=72, height=72, bg=config.PANEL_COLOR,
+                         highlightthickness=0, bd=0)
+        self.bars = [self.create_rectangle(2 + i * 6, 64, 6 + i * 6, 68,
+                                           fill=config.SEPARATOR_COLOR, outline="")
+                     for i in range(12)]
+
+    def show_keys(self, keys, key_order):
+        # Different instruments use different pitch ranges and keyboard maps.
+        # Playback keys are scan-code dictionaries, so compare by equality.
+        ordered = []
+        for key in key_order:
+            if key not in ordered:
+                ordered.append(key)
+        levels = [0] * len(self.bars)
+        for index, key in enumerate(ordered):
+            if key in keys:
+                levels[index * len(self.bars) // len(ordered)] += 1
+        for index, (bar, level) in enumerate(zip(self.bars, levels)):
+            height = min(60, 20 + level * 13) if level else 4
+            self.coords(bar, 2 + index * 6, 68 - height, 6 + index * 6, 68)
+            self.itemconfigure(bar, fill=config.ACCENT_COLOR if level
+                               else config.SEPARATOR_COLOR)
+
+
 def button(parent, text, command, *, accent=False, **options):
     """Build a flat button with disabled-aware hover feedback."""
     background = config.ACCENT_COLOR if accent else config.BUTTON_COLOR

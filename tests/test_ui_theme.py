@@ -8,7 +8,7 @@ import re
 from unittest.mock import Mock, patch
 
 import app_config as config
-from ui_theme import button, style_combobox
+from ui_theme import MidiVisualizer, button, style_combobox
 
 
 class VersionTests(unittest.TestCase):
@@ -30,6 +30,21 @@ class ThemeTests(unittest.TestCase):
         except tk.TclError as error:
             self.skipTest(f"Tk display unavailable: {error}")
         self.addCleanup(self.root.destroy)
+
+    def test_visualizer_follows_held_notes_and_resets(self):
+        widget = MidiVisualizer(self.root)
+        low, middle, high = ({"scan_code": code} for code in (44, 45, 46))
+        widget.show_keys([low, high], [low, middle, high])
+        for index in (0, 8):
+            self.assertEqual(widget.itemcget(widget.bars[index], "fill"), config.ACCENT_COLOR)
+            self.assertLess(widget.coords(widget.bars[index])[1], 64)
+        widget.show_keys([high], [low, middle, high])
+        self.assertEqual(widget.itemcget(widget.bars[0], "fill"), config.SEPARATOR_COLOR)
+        self.assertEqual(widget.itemcget(widget.bars[8], "fill"), config.ACCENT_COLOR)
+        widget.show_keys([], [])
+        for bar in widget.bars:
+            self.assertEqual(widget.coords(bar)[1], 64)
+            self.assertEqual(widget.itemcget(bar, "fill"), config.SEPARATOR_COLOR)
 
     def test_hover_and_commands_respect_disabled_state(self):
         for accent, base, hover in (
@@ -101,6 +116,11 @@ class ThemeTests(unittest.TestCase):
             self.assertEqual(main.status_label.cget("background"), config.PANEL_COLOR)
             main.set_status("Playing: example.mid")
             self.assertEqual(main.status_label.cget("text"), "Playing: example.mid")
+            main.set_now_playing("example.mid")
+            main.set_status("Paused")
+            self.assertEqual(main.now_playing_label.cget("text"), "example.mid")
+            # Long names stay on one line and cannot push controls off-screen.
+            main.set_now_playing("very long song name " * 20 + ".mid")
 
             def descendants(widget):
                 for child in widget.winfo_children():
