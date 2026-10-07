@@ -12,6 +12,37 @@ from app_config import (
 from app_storage import state_file_lock
 
 
+def fallback_sources(fallback_dir):
+    """Read MIDI filename-to-source-folder entries; unavailable indexes are empty."""
+    try:
+        data = json.loads((Path(fallback_dir) / ".heartopia-sources.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict) or any(
+            not isinstance(name, str) or not isinstance(folder, str)
+            for name, folder in data.items()):
+        return {}
+    return data
+
+
+def record_fallback_output(midi_path, source_path):
+    """Atomically associate a fallback MIDI with the folder of its source audio."""
+    midi_path = Path(midi_path)
+    path = midi_path.parent / ".heartopia-sources.json"
+    temporary = path.with_suffix(".json.tmp")
+    with state_file_lock():
+        data = fallback_sources(midi_path.parent)
+        data[midi_path.name.casefold()] = os.path.normcase(os.path.abspath(Path(source_path).parent))
+        try:
+            with temporary.open("w", encoding="utf-8") as output:
+                json.dump(data, output)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
 def app_data_dir():
     return Path(os.environ.get("LOCALAPPDATA") or Path.home()) / APP_DATA_FOLDER
 

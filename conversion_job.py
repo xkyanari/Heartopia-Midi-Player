@@ -1,5 +1,8 @@
 """Parent-owned conversion lifecycle; UI integration is deliberately separate."""
+import logging
 import multiprocessing
+import pickle
+import queue
 import time
 import uuid
 
@@ -66,8 +69,11 @@ class ConversionJob:
         while True:
             try:
                 message = self.messages.get_nowait()
-            except Exception:
+            except (queue.Empty, EOFError, OSError, pickle.UnpicklingError, ValueError):
                 # A terminated writer can leave an incomplete or corrupt frame.
+                break
+            except Exception:
+                logging.getLogger(__name__).exception("Unexpected error reading conversion worker messages")
                 break
             if message["type"] == "stage":
                 if message["stage"] in ("transcribing", "downloading"):
