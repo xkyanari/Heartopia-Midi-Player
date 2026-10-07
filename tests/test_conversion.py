@@ -1,4 +1,5 @@
 import io
+from contextlib import nullcontext
 import hashlib
 import json
 import multiprocessing
@@ -54,6 +55,9 @@ class OutputFolderTests(unittest.TestCase):
         (self.folder / "name (2).mid").mkdir()
         (self.fallback / "SAVED.mid").touch()
         (self.fallback / "SAVED COPY (12).MID").touch()
+        with patch.object(files, "state_file_lock", side_effect=nullcontext):
+            files.record_fallback_output(self.fallback / "SAVED.mid", self.folder / "saved.flac")
+            files.record_fallback_output(self.fallback / "SAVED COPY (12).MID", self.folder / "saved copy.ogg")
         with patch("conversion_service.os.scandir", wraps=os.scandir) as scan:
             rows = scan_audio_folder(self.folder, self.fallback)
         self.assertEqual(scan.call_count, 2)
@@ -66,6 +70,8 @@ class OutputFolderTests(unittest.TestCase):
         fallback.mkdir()
         (self.folder / "name.wav").touch()
         (fallback / "name (1).mid").touch()
+        with patch.object(files, "state_file_lock", side_effect=nullcontext):
+            files.record_fallback_output(fallback / "name (1).mid", self.folder / "name.wav")
         with patch("conversion_service.app_data_dir", return_value=self.folder):
             self.assertTrue(scan_audio_folder(self.folder)[0]["midi"])
 

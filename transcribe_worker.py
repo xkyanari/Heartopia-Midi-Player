@@ -29,7 +29,7 @@ def run_conversion(request, messages):
         emit({"type": "stage", "stage": "dependencies"})
         dependencies = require_dependencies()
         threading.Thread(target=watch_parent, daemon=True).start()
-        from conversion_files import forget_temp
+        from conversion_files import forget_temp, record_fallback_output
         audio, duration = None, None
         if request.get("operation", "convert") == "convert":
             emit({"type": "stage", "stage": "decoding"})
@@ -62,6 +62,12 @@ def run_conversion(request, messages):
             temporary = None
         except Exception as exc:
             warning = f"MIDI saved, but temporary registry cleanup needs retry: {exc}"
+        if os.path.normcase(os.path.abspath(Path(output).parent)) != os.path.normcase(os.path.abspath(Path(request["source"]).parent)):
+            try:
+                record_fallback_output(output, request["source"])
+            except Exception as exc:
+                index_warning = f"MIDI saved, but fallback source recording needs retry: {exc}"
+                warning = f"{warning}; {index_warning}" if warning else index_warning
         emit({"type": "success", "path": output, "checkpoint_path": checkpoint, "warning": warning})
     except Exception as exc:
         emit({"type": "error", "message": str(exc) if isinstance(exc, ConversionError)
