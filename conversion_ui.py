@@ -333,7 +333,8 @@ class ConvertDialog:
             if kind == "success":
                 self.refresh()
         elif kind in ("error", "cancelled", "warning"):
-            self.started = None
+            if kind != "warning":
+                self.started = None
             self.info.set(event["message"])
             self.owner.set_status(event["message"])
             if kind == "error":

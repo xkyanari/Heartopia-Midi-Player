@@ -171,6 +171,32 @@ class DialogTests(unittest.TestCase):
         self.status.assert_called_with(config.SETTINGS_SAVE_WARNING)
         error.assert_not_called()
 
+    def test_warning_keeps_elapsed_time_running(self):
+        self.dialog.begin({"source": "piano.wav"})
+        started = self.dialog.started
+        warning = "Settings could not be saved."
+        with patch("conversion_ui.messagebox.showerror") as error:
+            self.dialog.handle({"type": "warning", "message": warning})
+        self.assertEqual(self.dialog.started, started)
+        self.assertEqual(self.dialog.info.get(), warning)
+        self.status.assert_called_with(warning)
+        self.assertTrue(self.ui.busy)
+        error.assert_not_called()
+        with patch("conversion_ui.time.monotonic", return_value=started + 7):
+            self.dialog.tick()
+        self.assertIn("Elapsed 7 s", self.dialog.info.get())
+
+    def test_success_after_cancel_is_saved_and_sent_to_playlist(self):
+        self.dialog.begin({"source": "piano.wav"})
+        self.preflight_result()
+        self.dialog.cancel()
+        self.service.events.put({"type": "success", "path": "piano.mid"})
+        self.service.events.put({"type": "finished"})
+        self.ui._poll()
+        self.converted.assert_called_once_with("piano.mid")
+        self.assertEqual(self.dialog.info.get(), "Saved: piano.mid")
+        self.assertFalse(self.ui.busy)
+
 
 class IntegrationTests(unittest.TestCase):
     def setUp(self):
