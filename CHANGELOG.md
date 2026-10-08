@@ -4,6 +4,13 @@ All notable changes to Heartopia MIDI Player are documented here.
 
 ## 0.4.10 — 2026-10-07
 
+### Added
+- Added a "Now Playing:" line showing the current song name, resetting to "Nothing playing" on stop or when the song ends.
+- Added a 12-bar visualizer that lights up for held notes and goes flat while paused.
+- Added double-click or Enter on a playlist row to play that song.
+- Added song lengths to each playlist row, showing `--:--` for unreadable files.
+- Added a progress bar with elapsed / total / remaining time that freezes while paused; playlist and loop transitions also wait for paused time.
+
 ### Changed
 - Updated the player with flat midnight-blue panels, cyan accents, a decorative record graphic, and Segoe UI typography.
 - Updated the displayed version and Windows version metadata together; the title bar now also shows the version.
