@@ -229,6 +229,7 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                     for size in (config.WINDOW_SIZE, "%dx%d" % self.root.minsize(), "720x800"):
                         self.root.geometry(size)
                         self.root.update()
+                        self.assertGreaterEqual(self.root.winfo_height(), self.root.winfo_reqheight())
                         for widget in widgets:
                             x = widget.winfo_rootx() - self.root.winfo_rootx()
                             y = widget.winfo_rooty() - self.root.winfo_rooty()

@@ -857,6 +857,11 @@ def build_player_ui():
     playlist_box.yview_moveto(scroll)
     highlight_keys(pressed_keys)
     update_playback_time(schedule=False)
+    # Measure the finished layout using the actual Tk fonts/DPI. A fixed height
+    # can otherwise squeeze the playlist below its five requested rows.
+    root.update_idletasks()
+    minimum_width, minimum_height = root.minsize()
+    root.minsize(minimum_width, max(minimum_height, root.winfo_reqheight()))
 
 
 def main():
