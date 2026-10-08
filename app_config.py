@@ -1,6 +1,6 @@
 APP_TITLE = "Heartopia MIDI Player"
 APP_VERSION = "v0.4.10"
-APP_CREDIT = "by yukiokoito, modified by Kyanari"
+APP_CREDIT = "By yukiokoito, Modified by Kyanari"
 
 WINDOW_SIZE = "480x560"
 BACKGROUND_COLOR = "#090e18"
@@ -62,23 +62,23 @@ CONVERSION_DIALOG_SIZE = "760x570"
 CONVERSION_TITLE = "Convert Piano Audio to MIDI…"
 CONVERSION_SCOPE_TEXT = "Works best on solo piano recordings. Other instruments or full mixes give poor results."
 CONVERSION_CPU_TEXT = "Conversion takes roughly 1–2× the song length on CPU."
-CONVERSION_EMPTY_TEXT = "No audio files found"
+CONVERSION_EMPTY_TEXT = "No Audio Files Found"
 CONVERSION_BUTTONS = {
-    "browse": "Browse…", "folder": "Change folder…", "refresh": "Refresh",
-    "model": "Choose model file…", "download": "Re-download model",
+    "browse": "Browse…", "folder": "Change Folder…", "refresh": "Refresh",
+    "model": "Choose Model File…", "download": "Re-Download Model",
     "convert": "Convert", "cancel": "Cancel",
 }
 CONVERSION_STAGES = {
-    "dependencies": "Loading conversion libraries…", "decoding": "Decoding audio…",
-    "checkpoint": "Checking model…", "downloading": "Downloading model…",
-    "loading_model": "Validating model…", "transcribing": "Transcribing…",
+    "dependencies": "Loading Conversion Libraries…", "decoding": "Decoding Audio…",
+    "checkpoint": "Checking Model…", "downloading": "Downloading Model…",
+    "loading_model": "Validating Model…", "transcribing": "Transcribing…",
     "validating": "Validating MIDI…",
 }
 CONVERSION_STANDARD_BUILD_TEXT = "Conversion requires the conversion-enabled build."
 
 DEFAULT_LAYOUT = "22"
 DEFAULT_INSTRUMENT = "piano"
-DEFAULT_STATUS = "No files loaded"
+DEFAULT_STATUS = "No Files Loaded"
 
 KEY_HOLD_MS = 250
 PLAYBACK_SPEED = 1.0

@@ -68,7 +68,7 @@ class PlaybackDisplayTests(unittest.TestCase):
         self.label.config.assert_called_with(text="song.mid")
         self.root.step()  # Final note ends.
         self.visualizer.show_keys.assert_called_with([], ["a", "b"])
-        self.label.config.assert_called_with(text="Nothing playing")
+        self.label.config.assert_called_with(text="Nothing Playing")
 
     def test_pause_resume_and_stop(self):
         self.start()
@@ -82,20 +82,20 @@ class PlaybackDisplayTests(unittest.TestCase):
         main.stop()
         self.assertFalse(self.root.pending)
         self.visualizer.show_keys.assert_called_with([], ["a", "b"])
-        self.label.config.assert_called_with(text="Nothing playing")
+        self.label.config.assert_called_with(text="Nothing Playing")
 
     def test_selection_and_status_do_not_replace_playing_song(self):
         self.start()
         with patch.object(main, "playlist_box", Mock(curselection=lambda: (1,)), create=True), \
                 patch.object(main, "current_index", 0):
             main.on_playlist_select(None)
-            main.set_status("Added to playlist: another.mid")
+            main.set_status("Added to Playlist: another.mid")
             self.assertEqual(main.current_index, 1)
             self.label.config.assert_called_with(text="song.mid")
 
     def test_empty_midi_does_not_show_a_playing_song(self):
         main.start_playback([], on_key_press=main.highlight_keys, song_name="empty.mid")
-        self.label.config.assert_called_with(text="Nothing playing")
+        self.label.config.assert_called_with(text="Nothing Playing")
 
     def test_each_playback_mode_supplies_the_actual_song_name(self):
         songs = [{"name": "first.mid", "path": "first.mid"},
@@ -149,8 +149,8 @@ class PlaybackDisplayTests(unittest.TestCase):
             timer = main.time_update_id
             self.root.pending[timer] = (30000, self.root.pending[timer][1])
             self.root.step()
-            label.config.assert_called_with(text="0:30 / 2:00  ·  1:30 left")
+            label.config.assert_called_with(text="0:30 / 2:00  ·  1:30 Left")
             bar.coords.assert_called_with("played", 0, 0, 50, 4)
             main.stop()
-            label.config.assert_called_with(text="0:00 / 0:00  ·  0:00 left")
+            label.config.assert_called_with(text="0:00 / 0:00  ·  0:00 Left")
             self.assertFalse(self.root.pending)

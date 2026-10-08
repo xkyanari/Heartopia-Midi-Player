@@ -1,14 +1,17 @@
 """Settings logic needs no display; actual layout checks skip without Tk."""
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
+import json
 from pathlib import Path
 import queue
 import re
 import tempfile
 import tkinter as tk
+from tkinter import ttk
 import unittest
 from unittest.mock import Mock, patch
 
 import app_config as config
+import app_storage
 import main
 import ui_theme
 from conversion_ui import ConversionUI
@@ -20,6 +23,31 @@ class SettingsLogicTests(unittest.TestCase):
     def setUp(self):
         ui_theme.set_theme(DEFAULT_THEME)
         self.addCleanup(ui_theme.set_theme, DEFAULT_THEME)
+
+    def test_instrument_display_loads_old_keys_and_saves_keys_without_display(self):
+        variable = tk.StringVar(master=tk.Tcl())
+        with tempfile.TemporaryDirectory() as directory, ExitStack() as stack:
+            path = Path(directory) / "layout.json"
+            stack.enter_context(patch.object(app_storage, "LAYOUT_FILE", str(path)))
+            stack.enter_context(patch.object(app_storage, "state_file_lock", side_effect=nullcontext))
+            stack.enter_context(patch.object(main, "instrument_var", variable, create=True))
+            stack.enter_context(patch.object(main, "current_layout", "22"))
+            stack.enter_context(patch.object(main, "current_instrument", "piano"))
+            player = stack.enter_context(patch.object(main, "player", Mock()))
+            status = stack.enter_context(patch.object(main, "set_status"))
+            for key in main.INSTRUMENTS:
+                with self.subTest(instrument=key):
+                    path.write_text(json.dumps({"layout": "22", "instrument": key}), encoding="utf-8")
+                    main.load_layout()
+                    self.assertEqual(variable.get(), key.title())
+                    main.on_instrument_change()
+                    self.assertEqual(main.current_instrument, key)
+                    self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["instrument"], key)
+                    player.set_layout_and_instrument.assert_called_with("22", key)
+                    status.assert_called_with(f"Instrument: {key.title()}")
+            variable.set("Wooden Bass")
+            main.on_instrument_change()
+            self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["instrument"], "wooden bass")
 
     def test_six_complete_palettes_and_play_labels(self):
         self.assertEqual(len(THEMES), 6)
@@ -130,7 +158,7 @@ class SettingsLogicTests(unittest.TestCase):
                 patch.object(main, "set_status") as status, \
                 patch.object(main, "append_playlist_song") as append:
             main.scan_midi_folder()
-            self.assertIn("Cannot read MIDI folder", status.call_args.args[0])
+            self.assertIn("Cannot Read MIDI Folder", status.call_args.args[0])
             append.assert_not_called()
             with patch.object(main.filedialog, "askopenfilenames", return_value=()) as picker:
                 main.load_midi()
@@ -210,7 +238,7 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                     main.apply_theme(name)
                     self.assertEqual(main.playlist_box.size(), 1)
                     self.assertEqual(main.playlist_box.curselection(), (0,))
-                    self.assertEqual(main.instrument_var.get(), "violin")
+                    self.assertEqual(main.instrument_var.get(), "Violin")
                     self.assertEqual(main.loop_mode, "all")
                     self.assertEqual(main.status_label.cget("text"), "Paused")
                     self.assertEqual(main.now_playing_label.cget("text"), "song.mid")
@@ -224,6 +252,9 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                         main.transport_buttons[key].invoke()
                         callback.assert_called_once_with()
                     widgets = list(descendants(self.root))
+                    instrument_box = next(widget for widget in widgets if isinstance(widget, ttk.Combobox))
+                    self.assertEqual(tuple(instrument_box.cget("values")),
+                                     tuple(key.title() for key in main.INSTRUMENTS))
                     self.assertFalse(any(isinstance(widget, tk.Label) and
                                          widget.cget("text") == config.APP_VERSION for widget in widgets))
                     for size in (config.WINDOW_SIZE, "%dx%d" % self.root.minsize(), "720x800"):

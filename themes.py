@@ -58,7 +58,7 @@ THEMES = {
 DRAFT_BUTTONS = {
     **config.PLAYBACK_BUTTONS,
     "previous": "⏮ Previous", "play_selected": "▶ Play", "next": "⏭ Next",
-    "pause_resume": "⏸ Pause", "stop": "⏹ Stop", "play_playlist": "▶▶ Play playlist",
+    "pause_resume": "⏸ Pause", "stop": "⏹ Stop", "play_playlist": "▶▶ Play Playlist",
 }
 
 
