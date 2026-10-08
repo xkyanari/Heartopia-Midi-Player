@@ -17,7 +17,7 @@ resume after pausing. The progress bar is a read-only indicator.
 | 1 · Midnight Teal | Dark teal, separated sections, player first | A familiar upgrade; recommended starting point |
 | 2 · Paper Sage | Light background, green accent, more breathing room | Daytime use and a lighter appearance |
 | 3 · Studio Amber | Instrument first, rectangular panels, two-column controls | Scanning explicit labels and changing instruments |
-| 4 · Soft Plum | Softer panels, wider Play song, separate Play playlist row | A playful style with a clear main action |
+| 4 · Soft Plum | Softer panels, wider Play, separate Play playlist row | A playful style with a clear main action |
 | 5 · Graphite Blue | Playlist first, playback dock below | Frequent song selection and file management |
 
 Each uses the supplied screenshot's single song, version and credits. Long file

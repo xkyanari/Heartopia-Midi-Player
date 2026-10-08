@@ -5,6 +5,7 @@ All notable changes to Heartopia MIDI Player are documented here.
 ## 0.4.10 — 2026-10-07
 
 ### Added
+- Added six selectable looks, a Settings window, and remembered MIDI and conversion audio folders.
 - Added a "Now Playing:" line showing the current song name, resetting to "Nothing playing" on stop or when the song ends.
 - Added a 12-bar visualizer that lights up for held notes and goes flat while paused.
 - Added double-click or Enter on a playlist row to play that song.

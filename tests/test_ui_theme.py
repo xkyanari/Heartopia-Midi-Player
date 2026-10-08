@@ -8,6 +8,8 @@ import re
 from unittest.mock import Mock, patch
 
 import app_config as config
+import ui_theme
+from themes import DEFAULT_THEME
 from ui_theme import MidiVisualizer, button, style_combobox
 
 
@@ -25,6 +27,7 @@ class VersionTests(unittest.TestCase):
 
 class ThemeTests(unittest.TestCase):
     def setUp(self):
+        ui_theme.set_theme(DEFAULT_THEME)
         try:
             self.root = tk.Tk()
         except tk.TclError as error:
@@ -107,8 +110,11 @@ class ThemeTests(unittest.TestCase):
             patches.enter_context(patch("main.tk.Tk", return_value=self.root))
             patches.enter_context(patch.object(self.root, "mainloop"))
             patches.enter_context(patch("conversion_ui.ConversionUI"))
-            for name in ("load_layout", "load_saved_playlist", "KeyboardPlayer"):
+            for name in ("load_layout", "load_saved_playlist", "load_player_settings", "scan_midi_folder", "KeyboardPlayer"):
                 patches.enter_context(patch.object(main, name))
+            for name in ("playlist_box", "status_label", "now_playing_label", "player", "playback_clock"):
+                patches.enter_context(patch.object(main, name, None))
+            patches.enter_context(patch.object(main, "playlist", []))
             callbacks = {name: patches.enter_context(patch.object(main, name))
                          for name in commands}
             main.main()
@@ -128,7 +134,7 @@ class ThemeTests(unittest.TestCase):
                     yield from descendants(child)
 
             widgets = list(descendants(self.root))
-            self.assertTrue(any(isinstance(widget, tk.Label) and
+            self.assertFalse(any(isinstance(widget, tk.Label) and
                                 widget.cget("text") == config.APP_VERSION for widget in widgets))
             buttons = {widget.cget("text"): widget for widget in widgets
                        if isinstance(widget, tk.Button)}
