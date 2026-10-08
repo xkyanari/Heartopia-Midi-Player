@@ -33,7 +33,10 @@ class FakeService:
 
 class DialogTests(unittest.TestCase):
     def setUp(self):
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except tk.TclError as error:
+            self.skipTest(f"Tk display unavailable: {error}")
         self.root.withdraw()
         self.addCleanup(self.root.destroy)
         self.service = FakeService()
@@ -324,7 +327,10 @@ class IntegrationTests(unittest.TestCase):
 
 class PlaylistTests(unittest.TestCase):
     def setUp(self):
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except tk.TclError as error:
+            self.skipTest(f"Tk display unavailable: {error}")
         self.root.withdraw()
         self.addCleanup(self.root.destroy)
         box = tk.Listbox(self.root, exportselection=False)

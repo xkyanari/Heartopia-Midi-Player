@@ -65,16 +65,25 @@ class MidiVisualizer(tk.Canvas):
 
 def button(parent, text, command, *, accent=False, **options):
     """Build a flat button with disabled-aware hover feedback."""
+    widget = tk.Button(
+        parent, text=text, command=command, relief=tk.FLAT, bd=0,
+        highlightthickness=1, padx=5, pady=5, cursor="hand2",
+        font=options.pop("font", config.UI_FONT), **options,
+    )
+    style_button(widget, accent=accent)
+    return widget
+
+
+def style_button(widget, *, accent=False):
+    """Refresh colours and hover bindings without changing command or state."""
     background = current().ACCENT_COLOR if accent else current().BUTTON_COLOR
     hover = current().ACCENT_HOVER_COLOR if accent else current().HOVER_COLOR
     foreground = current().ACCENT_TEXT_COLOR if accent else current().BUTTON_TEXT_COLOR
-    widget = tk.Button(
-        parent, text=text, command=command, bg=background, fg=foreground,
+    widget.configure(
+        bg=background, fg=foreground,
         activebackground=hover, activeforeground=foreground,
-        disabledforeground=current().FOOTER_TEXT_COLOR, relief=tk.FLAT, bd=0,
-        highlightthickness=1, highlightbackground=background,
-        highlightcolor=current().ACCENT_COLOR, padx=5, pady=5, cursor="hand2",
-        font=options.pop("font", config.UI_FONT), **options,
+        disabledforeground=current().FOOTER_TEXT_COLOR, highlightbackground=background,
+        highlightcolor=current().ACCENT_COLOR,
     )
 
     def set_background(color):
@@ -83,7 +92,6 @@ def button(parent, text, command, *, accent=False, **options):
 
     widget.bind("<Enter>", lambda event: set_background(hover))
     widget.bind("<Leave>", lambda event: set_background(background))
-    return widget
 
 
 def style_combobox(root):
