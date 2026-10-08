@@ -3,16 +3,46 @@ import tkinter as tk
 from tkinter import ttk
 
 import app_config as config
+from themes import DEFAULT_THEME, resolve
+
+_active = resolve(DEFAULT_THEME)
+_subscribers = []
+
+
+def current():
+    """Return the active palette and layout data (also usable by other windows)."""
+    return _active
+
+
+def subscribe(callback):
+    """Callback receives the new theme; return an unsubscribe function."""
+    _subscribers.append(callback)
+
+    def unsubscribe():
+        if callback in _subscribers:
+            _subscribers.remove(callback)
+
+    return unsubscribe
+
+
+def set_theme(name):
+    global _active
+    theme = resolve(name)
+    if theme is _active:
+        return
+    _active = theme
+    for callback in tuple(_subscribers):
+        callback(theme)
 
 
 class MidiVisualizer(tk.Canvas):
     """Light pitch-group bars for held MIDI keys, without an animation timer."""
 
     def __init__(self, parent):
-        super().__init__(parent, width=72, height=72, bg=config.PANEL_COLOR,
+        super().__init__(parent, width=72, height=72, bg=current().PANEL_COLOR,
                          highlightthickness=0, bd=0)
         self.bars = [self.create_rectangle(2 + i * 6, 64, 6 + i * 6, 68,
-                                           fill=config.SEPARATOR_COLOR, outline="")
+                                           fill=current().SEPARATOR_COLOR, outline="")
                      for i in range(12)]
 
     def show_keys(self, keys, key_order):
@@ -29,21 +59,21 @@ class MidiVisualizer(tk.Canvas):
         for index, (bar, level) in enumerate(zip(self.bars, levels)):
             height = min(60, 20 + level * 13) if level else 4
             self.coords(bar, 2 + index * 6, 68 - height, 6 + index * 6, 68)
-            self.itemconfigure(bar, fill=config.ACCENT_COLOR if level
-                               else config.SEPARATOR_COLOR)
+            self.itemconfigure(bar, fill=current().ACCENT_COLOR if level
+                               else current().SEPARATOR_COLOR)
 
 
 def button(parent, text, command, *, accent=False, **options):
     """Build a flat button with disabled-aware hover feedback."""
-    background = config.ACCENT_COLOR if accent else config.BUTTON_COLOR
-    hover = config.ACCENT_HOVER_COLOR if accent else config.HOVER_COLOR
-    foreground = config.ACCENT_TEXT_COLOR if accent else config.BUTTON_TEXT_COLOR
+    background = current().ACCENT_COLOR if accent else current().BUTTON_COLOR
+    hover = current().ACCENT_HOVER_COLOR if accent else current().HOVER_COLOR
+    foreground = current().ACCENT_TEXT_COLOR if accent else current().BUTTON_TEXT_COLOR
     widget = tk.Button(
         parent, text=text, command=command, bg=background, fg=foreground,
         activebackground=hover, activeforeground=foreground,
-        disabledforeground=config.FOOTER_TEXT_COLOR, relief=tk.FLAT, bd=0,
+        disabledforeground=current().FOOTER_TEXT_COLOR, relief=tk.FLAT, bd=0,
         highlightthickness=1, highlightbackground=background,
-        highlightcolor=config.ACCENT_COLOR, padx=5, pady=5, cursor="hand2",
+        highlightcolor=current().ACCENT_COLOR, padx=5, pady=5, cursor="hand2",
         font=options.pop("font", config.UI_FONT), **options,
     )
 
@@ -72,23 +102,23 @@ def style_combobox(root):
         ],
     })])
     style.configure(
-        "Player.TCombobox", fieldbackground=config.PANEL_COLOR,
-        background=config.BUTTON_COLOR, foreground=config.TEXT_COLOR,
-        arrowcolor=config.BUTTON_TEXT_COLOR, bordercolor=config.SEPARATOR_COLOR,
-        lightcolor=config.PANEL_COLOR, darkcolor=config.PANEL_COLOR,
+        "Player.TCombobox", fieldbackground=current().PANEL_COLOR,
+        background=current().BUTTON_COLOR, foreground=current().TEXT_COLOR,
+        arrowcolor=current().BUTTON_TEXT_COLOR, bordercolor=current().SEPARATOR_COLOR,
+        lightcolor=current().PANEL_COLOR, darkcolor=current().PANEL_COLOR,
         padding=3, font=config.UI_FONT,
     )
     style.map(
         "Player.TCombobox",
-        fieldbackground=[("readonly", config.PANEL_COLOR)],
-        foreground=[("readonly", config.TEXT_COLOR)],
-        background=[("active", config.HOVER_COLOR)],
-        selectbackground=[("readonly", config.PANEL_COLOR)],
-        selectforeground=[("readonly", config.TEXT_COLOR)],
+        fieldbackground=[("readonly", current().PANEL_COLOR)],
+        foreground=[("readonly", current().TEXT_COLOR)],
+        background=[("active", current().HOVER_COLOR)],
+        selectbackground=[("readonly", current().PANEL_COLOR)],
+        selectforeground=[("readonly", current().TEXT_COLOR)],
     )
     for option, value in {
-        "background": config.PANEL_COLOR, "foreground": config.TEXT_COLOR,
-        "selectBackground": config.SELECTION_COLOR,
-        "selectForeground": config.TEXT_COLOR, "font": config.UI_FONT,
+        "background": current().PANEL_COLOR, "foreground": current().TEXT_COLOR,
+        "selectBackground": current().SELECTION_COLOR,
+        "selectForeground": current().TEXT_COLOR, "font": config.UI_FONT,
     }.items():
         root.option_add(f"*TCombobox*Listbox*{option}", value)

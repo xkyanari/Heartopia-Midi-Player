@@ -109,7 +109,7 @@
 </svg>
 <main>
   <h1>Five directions for your MIDI player</h1>
-  <p class="intro">Compare the same song and existing controls in five layouts. Each draft keeps the full title readable, separates Play song from Play playlist, and gives the main action a clear accent.</p>
+  <p class="intro">Compare the same song and existing controls in five layouts. Each draft keeps the full title readable, separates Play from Play playlist, and gives the main action a clear accent.</p>
   <nav class="filter" aria-label="Choose a draft to view">
     <button type="button" data-draft="all" aria-pressed="true">All five</button>
     <button type="button" data-draft="midnight" aria-pressed="false">1 · Midnight Teal</button>
@@ -137,7 +137,7 @@
       <div class="instrument"><span class="eyebrow">Instrument</span><span class="instrument-value">Piano <span aria-hidden="true">⌄</span></span></div>
       <div class="transport" aria-label="Playback controls (preview)">
         <span class="control previous"><svg class="icon" aria-hidden="true"><use href="#previous"/></svg>Previous</span>
-        <span class="control primary"><svg class="icon" aria-hidden="true"><use href="#play"/></svg>Play song</span>
+        <span class="control primary"><svg class="icon" aria-hidden="true"><use href="#play"/></svg>Play</span>
         <span class="control next"><svg class="icon" aria-hidden="true"><use href="#next"/></svg>Next</span>
         <span class="control"><svg class="icon" aria-hidden="true"><use href="#pause"/></svg>Pause</span>
         <span class="control"><svg class="icon" aria-hidden="true"><use href="#stop"/></svg>Stop</span>
@@ -159,7 +159,7 @@
     { id: 'midnight', name: 'Midnight Teal', description: 'A polished evolution of the current player. Clear sections, a calm dark palette and a familiar player-first layout.', note: 'Best for: keeping the familiar feel. My recommended starting point.' },
     { id: 'paper', name: 'Paper Sage', description: 'A bright, airy alternative. More space around the song title, soft green accents and a quieter reading experience.', note: 'Best for: a light theme and daytime use.' },
     { id: 'studio', name: 'Studio Amber', description: 'A precise, instrument-focused layout. The instrument comes first; wider controls sit in two columns with explicit labels.', note: 'Best for: easily scanning controls while switching instruments.' },
-    { id: 'plum', name: 'Soft Plum', description: 'A softer, playful player. The larger Play song action leads, while Play playlist gets its own full-width row.', note: 'Best for: an inviting look with an unmistakable primary action.' },
+    { id: 'plum', name: 'Soft Plum', description: 'A softer, playful player. The larger Play action leads, while Play playlist gets its own full-width row.', note: 'Best for: an inviting look with an unmistakable primary action.' },
     { id: 'graphite', name: 'Graphite Blue', description: 'A playlist-first layout. File management sits at the top; the current song and playback controls form a dock below.', note: 'Best for: choosing and managing songs frequently.' }
   ];
   const gallery = document.getElementById('gallery');

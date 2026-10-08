@@ -20,11 +20,13 @@ class ConversionUI:
         self.folder = ""
         self.ready = self.busy = self.closing = False
         self.button = self.dialog = None
+        self._pending_settings = {}
+        self.folder_callbacks = []
         self.root.after(config.CONVERSION_UI_POLL_MS, self._poll)
 
     def attach_button(self, button):
         self.button = button
-        self.button.config(state=tk.DISABLED)
+        self.button.config(state=tk.DISABLED if not self.ready or self.busy or self.closing else tk.NORMAL)
 
     def open(self):
         if not self.ready or self.closing:
@@ -41,7 +43,22 @@ class ConversionUI:
 
     def save(self, updates):
         self.settings.update(updates)
+        if not self.ready:
+            self._pending_settings.update(updates)
         self.service.save(updates)
+
+    def set_audio_folder(self, folder):
+        """Shared folder setter for Settings and the conversion dialog."""
+        self.folder = folder
+        self.save({"audio_input_folder": folder})
+        self._notify_folder()
+        if self.dialog is not None:
+            self.dialog.folder.set(folder)
+            self.dialog.refresh()
+
+    def _notify_folder(self):
+        for callback in tuple(self.folder_callbacks):
+            callback(self.folder)
 
     def set_busy(self, busy):
         self.busy = busy
@@ -62,8 +79,10 @@ class ConversionUI:
                 event = self.service.events.get_nowait()
                 kind = event["type"]
                 if kind == "initialized":
-                    self.settings = event["settings"]
-                    self.folder = event["folder"]
+                    self.settings = {**event["settings"], **self._pending_settings}
+                    self.folder = self._pending_settings.get("audio_input_folder", event["folder"])
+                    self._pending_settings.clear()
+                    self._notify_folder()
                     self.missing = event["missing"]
                     self.ready = True
                     if self.button is not None and not self.closing:
@@ -182,10 +201,7 @@ class ConvertDialog:
     def change_folder(self):
         folder = filedialog.askdirectory(parent=self.window, initialdir=self.folder.get() or None)
         if folder:
-            self.folder.set(folder)
-            self.owner.folder = folder
-            self.owner.save({"audio_input_folder": folder})
-            self.refresh()
+            self.owner.set_audio_folder(folder)
 
     def browse(self):
         initial = self.folder.get() or self.owner.settings.get("last_audio_dir") or None

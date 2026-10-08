@@ -99,7 +99,7 @@ FILE_BUTTONS = {
 
 PLAYBACK_BUTTONS = {
     "previous": "⏮",
-    "play_selected": "▶",
+    "play_selected": "▶ Play",
     "play_playlist": "▶▶",
     "musical_chairs": "Musical Chairs",
     "pause_resume": "⏯",

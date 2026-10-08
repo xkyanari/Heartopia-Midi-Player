@@ -41,12 +41,15 @@ class SettingsTests(unittest.TestCase):
         self.path.write_text(json.dumps(original), encoding="utf-8")
         app_storage.save_settings({"checkpoint_path": "C:/models/piano.pth",
                                    "audio_input_folder": "C:/audio", "last_audio_dir": "C:/other"})
+        app_storage.save_settings({"theme": "Paper Sage", "midi_input_folder": "C:/midi"})
         app_storage.save_layout_settings("22", "violin")
         data = app_storage.load_settings()
         self.assertEqual(data["unknown"], original["unknown"])
         self.assertEqual(data["checkpoint_path"], "C:/models/piano.pth")
         self.assertEqual(data["audio_input_folder"], "C:/audio")
         self.assertEqual(data["last_audio_dir"], "C:/other")
+        self.assertEqual(data["theme"], "Paper Sage")
+        self.assertEqual(data["midi_input_folder"], "C:/midi")
         self.assertEqual(app_storage.load_layout_settings(), ("22", "violin"))
 
     def test_missing_or_corrupt_settings_are_not_rewritten_by_read(self):
