@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heartopia MIDI Player — five UI drafts</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e9edf2; color: #202d40; font: 15px/1.5 "Segoe UI", sans-serif; }
+  main { max-width: 1480px; margin: auto; padding: 32px 24px 48px; }
+  h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 34px); letter-spacing: -.8px; }
+  .intro { max-width: 800px; margin: 0 0 20px; }
+  .filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+  .filter button { background: white; border: 1px solid #8290a1; color: #202d40; padding: 9px 14px; border-radius: 6px; cursor: pointer; font: inherit; }
+  .filter button[aria-pressed="true"] { background: #202d40; color: white; }
+  button:focus-visible { outline: 3px solid #1569c7; outline-offset: 3px; }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 410px), 1fr)); gap: 32px 24px; align-items: start; }
+  .draft { min-width: 0; max-width: 480px; width: 100%; margin-inline: auto; }
+  .draft[hidden] { display: none; }
+  .draft > h2 { margin: 0 0 4px; font-size: 21px; }
+  .rationale { margin: 0 0 14px; min-height: 48px; color: #40516a; }
+  .window { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; box-shadow: 0 8px 24px #13243b20; font-size: 13px; }
+  .titlebar { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+  .window-actions { letter-spacing: 12px; white-space: nowrap; }
+  .app { display: grid; grid-template-areas: "brand" "song" "instrument" "transport" "modes" "library" "footer"; gap: 14px; padding: 20px; }
+  .brand { grid-area: brand; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand strong { font-size: 15px; letter-spacing: 2px; }
+  .brand span { color: var(--muted); font-size: 11px; }
+  .song { grid-area: song; background: var(--panel); padding: 18px; border: 1px solid var(--line); border-radius: var(--radius); }
+  .eyebrow { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+  .song-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 10px; }
+  .state { color: var(--accent); font-size: 11px; font-weight: 600; }
+  .state::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 6px; background: currentColor; border-radius: 50%; }
+  .song h3 { font-size: 20px; line-height: 1.3; margin: 0 0 4px; font-weight: 650; overflow-wrap: anywhere; }
+  .artist { color: var(--muted); margin: 0 0 14px; }
+  .progress { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .progress span { display: block; width: 0.36%; min-width: 2px; height: 100%; background: var(--accent); }
+  .times { display: flex; justify-content: space-between; color: var(--muted); margin-top: 7px; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .instrument { grid-area: instrument; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .instrument-value { display: flex; justify-content: space-between; align-items: center; width: 65%; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+  .transport { grid-area: transport; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+  .control { display: flex; gap: 7px; align-items: center; justify-content: center; min-height: 40px; padding: 8px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--button); color: var(--text); font-size: 12px; }
+  .control.primary { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 650; }
+  .icon { width: 16px; height: 16px; flex: 0 0 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; stroke-linecap: round; }
+  .modes { grid-area: modes; display: flex; flex-wrap: wrap; gap: 8px; }
+  .modes .control { flex: 1; white-space: nowrap; }
+  .library { grid-area: library; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); overflow: hidden; }
+  .library-heading { display: flex; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .library-heading strong { font-size: 13px; }
+  .library-heading span { font-size: 11px; color: var(--muted); }
+  .tracks { min-height: 108px; padding: 8px; }
+  .track { display: flex; align-items: center; gap: 10px; background: var(--selected); border-left: 3px solid var(--accent); border-radius: 3px; padding: 10px; }
+  .track-number { color: var(--accent); font-size: 11px; }
+  .track-name { flex: 1; min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+  .track small { color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .library-hint { color: var(--muted); margin: 0; padding: 0 14px 10px; font-size: 11px; }
+  .file-actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; border-top: 1px solid var(--line); padding: 10px; }
+  .file-actions .control { font-size: 11px; min-height: 36px; }
+  .footer { grid-area: footer; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: var(--muted); font-size: 10px; }
+  .midnight { --bg:#0c141e; --panel:#14202d; --button:#1e3040; --text:#eef5fb; --muted:#aabbca; --line:#324759; --accent:#72e1ce; --on-accent:#102a26; --selected:#203d46; --radius:6px; }
+  .paper { --bg:#fafbf8; --panel:#ffffff; --button:#eff3ee; --text:#26362e; --muted:#52665a; --line:#d0dacf; --accent:#2c674a; --on-accent:#ffffff; --selected:#e6f1e8; --radius:8px; }
+  .paper .song { border: 0; background: transparent; padding: 8px 0; }
+  .paper .song h3 { font-size: 24px; }
+  .paper .app { gap: 18px; padding: 24px; }
+  .studio { --bg:#17191d; --panel:#202329; --button:#2b3038; --text:#f2f3f5; --muted:#bac0ca; --line:#434a56; --accent:#f0bf68; --on-accent:#30230c; --selected:#3a3329; --radius:2px; }
+  .studio .app { grid-template-areas: "brand" "instrument" "song" "transport" "modes" "library" "footer"; }
+  .studio .song { border-left: 3px solid var(--accent); }
+  .studio .transport { grid-template-columns: repeat(2, 1fr); }
+  .studio .song h3 { font-size: 22px; }
+  .plum { --bg:#211c2c; --panel:#2c2639; --button:#3a314b; --text:#f7f1ff; --muted:#c6b9d8; --line:#574765; --accent:#d5b1ff; --on-accent:#2c1842; --selected:#453454; --radius:10px; }
+  .plum .app { grid-template-areas: "brand" "song" "transport" "instrument" "modes" "library" "footer"; gap: 12px; padding: 18px; }
+  .plum .song { padding: 20px; border: 0; }
+  .plum .transport .primary { grid-column: span 2; }
+  .plum .transport .previous { grid-row: 2; }
+  .plum .transport .next { grid-row: 2; }
+  .plum .transport .queue { grid-column: span 3; min-height: 34px; }
+  .graphite { --bg:#11171f; --panel:#1b232e; --button:#273242; --text:#f1f5fc; --muted:#b6c4d8; --line:#3b4c63; --accent:#a0c5ff; --on-accent:#112e54; --selected:#2b405e; --radius:4px; }
+  .graphite .app { grid-template-areas: "brand" "library" "song" "instrument" "transport" "modes" "footer"; }
+  .graphite .tracks { min-height: 152px; }
+  .graphite .song { border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; padding: 14px 0 0; }
+  .graphite .song h3 { font-size: 18px; }
+  .recommendation { margin: 12px 0 0; font-size: 13px; color: #40516a; }
+  .notice { margin: 28px 0 0; max-width: 850px; font-size: 13px; color: #40516a; }
+  .symbol-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  @media (max-width: 480px) {
+    main { padding: 20px 12px; }
+    .app, .paper .app { padding: 14px; }
+    .control { font-size: 11px; gap: 4px; }
+    .brand strong { letter-spacing: 1px; }
+  }
+  @media print {
+    body { background: white; }
+    .filter { display: none; }
+    .gallery { display: block; }
+    .draft { break-inside: avoid; margin-bottom: 24px; }
+    .window { box-shadow: none; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<svg class="symbol-defs" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+  <symbol id="pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+  <symbol id="stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></symbol>
+  <symbol id="previous" viewBox="0 0 24 24"><path d="M5 4v16M19 4L7 12l12 8z"/></symbol>
+  <symbol id="next" viewBox="0 0 24 24"><path d="M19 4v16M5 4l12 8L5 20z"/></symbol>
+  <symbol id="queue" viewBox="0 0 24 24"><path d="M3 5h18M3 10h10M3 15h6M15 13l7 4-7 4z"/></symbol>
+  <symbol id="loop" viewBox="0 0 24 24"><path d="M20 9V5H8a5 5 0 0 0-5 5M16 1l4 4-4 4M4 15v4h12a5 5 0 0 0 5-5M8 23l-4-4 4-4"/></symbol>
+</svg>
+<main>
+  <h1>Five directions for your MIDI player</h1>
+  <p class="intro">Compare the same song and existing controls in five layouts. Each draft keeps the full title readable, separates Play song from Play playlist, and gives the main action a clear accent.</p>
+  <nav class="filter" aria-label="Choose a draft to view">
+    <button type="button" data-draft="all" aria-pressed="true">All five</button>
+    <button type="button" data-draft="midnight" aria-pressed="false">1 · Midnight Teal</button>
+    <button type="button" data-draft="paper" aria-pressed="false">2 · Paper Sage</button>
+    <button type="button" data-draft="studio" aria-pressed="false">3 · Studio Amber</button>
+    <button type="button" data-draft="plum" aria-pressed="false">4 · Soft Plum</button>
+    <button type="button" data-draft="graphite" aria-pressed="false">5 · Graphite Blue</button>
+  </nav>
+  <div class="gallery" id="gallery"></div>
+  <noscript>Enable JavaScript to view the five locally generated previews. No network connection is required.</noscript>
+  <p class="notice">Static design previews, not a working player. Player controls below are illustrations; only the draft selector above is interactive. The timeline shows progress, not a seek control. No new playback features are proposed. Final spacing, icons and window size will need checking in Tkinter after you choose a draft.</p>
+</main>
+<template id="player-template">
+  <div class="window">
+    <div class="titlebar"><span>Heartopia MIDI Player v0.4.10</span><span class="window-actions" aria-hidden="true">− □ ×</span></div>
+    <div class="app">
+      <header class="brand"><strong>HEARTOPIA</strong><span>MIDI PLAYER</span></header>
+      <section class="song" aria-label="Now playing">
+        <div class="song-heading"><span class="eyebrow">Now playing</span><span class="state">Playing</span></div>
+        <h3>Pasko Na, Sinta Ko</h3>
+        <p class="artist">Gary Valenciano</p>
+        <div class="progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="280" aria-valuenow="1" aria-valuetext="1 second of 4 minutes 40 seconds"><span></span></div>
+        <div class="times"><span>0:01 / 4:40</span><span>4:40 left</span></div>
+      </section>
+      <div class="instrument"><span class="eyebrow">Instrument</span><span class="instrument-value">Piano <span aria-hidden="true">⌄</span></span></div>
+      <div class="transport" aria-label="Playback controls (preview)">
+        <span class="control previous"><svg class="icon" aria-hidden="true"><use href="#previous"/></svg>Previous</span>
+        <span class="control primary"><svg class="icon" aria-hidden="true"><use href="#play"/></svg>Play song</span>
+        <span class="control next"><svg class="icon" aria-hidden="true"><use href="#next"/></svg>Next</span>
+        <span class="control"><svg class="icon" aria-hidden="true"><use href="#pause"/></svg>Pause</span>
+        <span class="control"><svg class="icon" aria-hidden="true"><use href="#stop"/></svg>Stop</span>
+        <span class="control queue"><svg class="icon" aria-hidden="true"><use href="#queue"/></svg>Play playlist</span>
+      </div>
+      <div class="modes"><span class="control"><svg class="icon" aria-hidden="true"><use href="#loop"/></svg>Loop: Off</span><span class="control">Musical Chairs</span></div>
+      <section class="library" aria-label="Playlist">
+        <div class="library-heading"><strong>Your playlist</strong><span>1 MIDI file</span></div>
+        <div class="tracks"><div class="track"><span class="track-number">01</span><span class="track-name">Gary Valenciano - Pasko Na, Sinta Ko.mid</span><small>4:40</small></div></div>
+        <p class="library-hint">Double-click or press Enter to play</p>
+        <div class="file-actions"><span class="control">Load MIDI</span><span class="control">Delete</span><span class="control">Convert Audio</span></div>
+      </section>
+      <footer class="footer"><span>v0.4.10</span><span>by yukiokoito, modified by Kyanari</span></footer>
+    </div>
+  </div>
+</template>
+<script>
+  const drafts = [
+    { id: 'midnight', name: 'Midnight Teal', description: 'A polished evolution of the current player. Clear sections, a calm dark palette and a familiar player-first layout.', note: 'Best for: keeping the familiar feel. My recommended starting point.' },
+    { id: 'paper', name: 'Paper Sage', description: 'A bright, airy alternative. More space around the song title, soft green accents and a quieter reading experience.', note: 'Best for: a light theme and daytime use.' },
+    { id: 'studio', name: 'Studio Amber', description: 'A precise, instrument-focused layout. The instrument comes first; wider controls sit in two columns with explicit labels.', note: 'Best for: easily scanning controls while switching instruments.' },
+    { id: 'plum', name: 'Soft Plum', description: 'A softer, playful player. The larger Play song action leads, while Play playlist gets its own full-width row.', note: 'Best for: an inviting look with an unmistakable primary action.' },
+    { id: 'graphite', name: 'Graphite Blue', description: 'A playlist-first layout. File management sits at the top; the current song and playback controls form a dock below.', note: 'Best for: choosing and managing songs frequently.' }
+  ];
+  const gallery = document.getElementById('gallery');
+  const template = document.getElementById('player-template');
+  drafts.forEach((draft, index) => {
+    const article = document.createElement('article');
+    article.className = `draft ${draft.id}`;
+    article.id = draft.id;
+    const heading = document.createElement('h2');
+    heading.id = `${draft.id}-heading`;
+    heading.textContent = `${index + 1} · ${draft.name}`;
+    article.setAttribute('aria-labelledby', heading.id);
+    const description = document.createElement('p');
+    description.className = 'rationale';
+    description.textContent = draft.description;
+    const note = document.createElement('p');
+    note.className = 'recommendation';
+    note.textContent = draft.note;
+    article.append(heading, description, template.content.cloneNode(true), note);
+    gallery.append(article);
+  });
+  document.querySelectorAll('.filter button').forEach(button => {
+    button.addEventListener('click', () => {
+      document.querySelectorAll('.filter button').forEach(choice => {
+        choice.setAttribute('aria-pressed', String(choice === button));
+      });
+      document.querySelectorAll('.draft').forEach(draft => {
+        draft.hidden = button.dataset.draft !== 'all' && draft.id !== button.dataset.draft;
+      });
+    });
+  });
+</script>
+</body>
+</html>
