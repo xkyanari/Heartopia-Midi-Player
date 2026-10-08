@@ -71,7 +71,7 @@ class ConversionUI:
             return
         self.closing = True
         self.set_busy(True)
-        self.set_status("Closing: stopping conversion and cleaning temporary files…")
+        self.set_status("Closing: Stopping Conversion and Cleaning Temporary Files…")
         self.service.shutdown()
 
     def _poll(self):
@@ -136,9 +136,9 @@ class ConvertDialog:
 
         header = self.frame(self.window, "BACKGROUND_COLOR")
         header.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 8))
-        self.label("CONVERT AUDIO", parent=header, background="BACKGROUND_COLOR",
+        self.label("Convert Audio", parent=header, background="BACKGROUND_COLOR",
                    font=config.TITLE_FONT).pack(side=tk.LEFT)
-        self.label("PIANO TO MIDI", parent=header, background="BACKGROUND_COLOR",
+        self.label("Piano to MIDI", parent=header, background="BACKGROUND_COLOR",
                    foreground="ACCENT_COLOR").pack(side=tk.RIGHT)
 
         info_card = self.card(1)
@@ -151,13 +151,13 @@ class ConvertDialog:
         for key, command in (("folder", self.change_folder), ("refresh", self.refresh), ("browse", self.browse)):
             self.button(toolbar, config.CONVERSION_BUTTONS[key], command).pack(side=tk.LEFT, padx=(0, 6))
         files_card = self.card(2)
-        self.label("AUDIO FILES", parent=files_card, foreground="MUTED_TEXT_COLOR").pack(
+        self.label("Audio Files", parent=files_card, foreground="MUTED_TEXT_COLOR").pack(
             fill=tk.X, padx=10, pady=6)
         table = self.frame(files_card)
         table.pack(fill=tk.BOTH, expand=True, padx=10)
         self.tree = ttk.Treeview(table, columns=("name", "size", "modified", "midi"),
                                  show="headings", selectmode="browse", style="Conversion.Treeview", height=5)
-        for key, title, width in (("name", "File name", 220), ("size", "Size", 80),
+        for key, title, width in (("name", "File Name", 220), ("size", "Size", 80),
                                   ("modified", "Modified", 145), ("midi", "MIDI", 95)):
             self.tree.heading(key, text=title)
             self.tree.column(key, width=width, minwidth=50, stretch=key == "name")
@@ -170,7 +170,7 @@ class ConvertDialog:
         self.path_field(files_card, self.source).pack(fill=tk.X, padx=10, pady=(4, 6))
 
         model_card = self.card(3)
-        self.label("PIANO MODEL", parent=model_card, foreground="MUTED_TEXT_COLOR").pack(
+        self.label("Piano Model", parent=model_card, foreground="MUTED_TEXT_COLOR").pack(
             fill=tk.X, padx=10, pady=(6, 0))
         self.path_field(model_card, self.model).pack(fill=tk.X, padx=10, pady=(2, 0))
         models = self.frame(model_card)
@@ -301,7 +301,7 @@ class ConvertDialog:
     def browse(self):
         initial = self.folder.get() or self.owner.settings.get("last_audio_dir") or None
         path = filedialog.askopenfilename(parent=self.window, initialdir=initial,
-                filetypes=[("Audio files", " ".join("*" + ext for ext in config.SUPPORTED_AUDIO_EXTS)), ("All files", "*.*")])
+                filetypes=[("Audio Files", " ".join("*" + ext for ext in config.SUPPORTED_AUDIO_EXTS)), ("All Files", "*.*")])
         if path:
             self.tree.selection_remove(*self.tree.selection())
             self.source.set(path)
@@ -317,12 +317,12 @@ class ConvertDialog:
             self.owner.save({"last_audio_dir": str(Path(path).parent)})
 
     def choose_model(self):
-        path = filedialog.askopenfilename(parent=self.window, filetypes=[("Piano checkpoint", "*.pth"), ("All files", "*.*")])
+        path = filedialog.askopenfilename(parent=self.window, filetypes=[("Piano Checkpoint", "*.pth"), ("All Files", "*.*")])
         if path:
             self.begin({"operation": "model", "checkpoint_path": path})
 
     def approve_download(self):
-        return messagebox.askyesno("Download piano model", f"Download approximately {config.CHECKPOINT_EXPECTED_BYTES / 1_000_000:.0f} MB to:\n"
+        return messagebox.askyesno("Download Piano Model", f"Download approximately {config.CHECKPOINT_EXPECTED_BYTES / 1_000_000:.0f} MB to:\n"
                 f"{model_destination().parent}\n\nAudio stays on this computer. App-downloaded models may be replaced; user-provided files will be kept.", parent=self.window)
 
     def redownload(self):
@@ -331,7 +331,7 @@ class ConvertDialog:
 
     def convert(self):
         if not self.source.get():
-            self.info.set("Choose an audio file first.")
+            self.info.set("Choose an Audio File First.")
             return
         self.begin({"source": self.source.get(), "checkpoint_path": self.owner.settings.get("checkpoint_path"),
                     "fallback_dir": self.owner.settings.get("converted_output_dir"), "operation": "convert"})
@@ -343,7 +343,7 @@ class ConvertDialog:
         self.dispatched = False
         self.started = time.monotonic()
         self.transcribe_started = self.estimate = None
-        self.stage = "Checking selected files…"
+        self.stage = "Checking Selected Files…"
         self.owner.set_busy(True)
         for control in self.controls:
             control.config(state=tk.DISABLED)
@@ -370,7 +370,7 @@ class ConvertDialog:
         if not self.dispatched:
             self.task_token = uuid.uuid4().hex
             self.finish()
-            self.info.set("Conversion cancelled.")
+            self.info.set("Conversion Cancelled.")
 
     def close(self):
         if self.owner.busy:
@@ -385,7 +385,7 @@ class ConvertDialog:
         if self.started is None:
             return
         elapsed = time.monotonic() - (self.transcribe_started or self.started)
-        estimate = f" · Estimate ~{self.estimate:.0f} s (not a deadline)" if self.estimate else ""
+        estimate = f" · Estimate ~{self.estimate:.0f} s (Not a Deadline)" if self.estimate else ""
         self.info.set(f"{self.stage} · Elapsed {elapsed:.0f} s{estimate}")
 
     def handle(self, event):
@@ -397,13 +397,13 @@ class ConvertDialog:
                 key = str(index)
                 self.rows[key] = row
                 self.tree.insert("", tk.END, iid=key, values=(row["name"], f"{row['size'] / 1024:.1f} KB",
-                        datetime.fromtimestamp(row["modified"]).strftime("%Y-%m-%d %H:%M"), "MIDI exists" if row["midi"] else ""))
+                        datetime.fromtimestamp(row["modified"]).strftime("%Y-%m-%d %H:%M"), "MIDI Exists" if row["midi"] else ""))
             if not self.owner.busy:
-                self.info.set("Choose a file and click Convert." if self.rows else config.CONVERSION_EMPTY_TEXT)
+                self.info.set("Choose a File and Click Convert." if self.rows else config.CONVERSION_EMPTY_TEXT)
         elif kind == "scan_error" and event["token"] == self.scan_token:
             self.tree.delete(*self.tree.get_children())
             self.rows = {}
-            self.info.set(f"Cannot read audio folder: {event['message']}. Use Change folder…")
+            self.info.set(f"Cannot Read Audio Folder: {event['message']}. Use Change Folder…")
         elif kind == "preflight":
             request = dict(event["request"])
             if request.pop("_token") != self.task_token or not self.owner.busy:
@@ -411,7 +411,7 @@ class ConvertDialog:
             if not event["model_exists"] and request.get("operation") == "convert" and not request.get("allow_download"):
                 if not self.approve_download():
                     self.finish()
-                    self.info.set("Download cancelled. Choose model file… to use an offline checkpoint.")
+                    self.info.set("Download Cancelled. Choose Model File… to Use an Offline Checkpoint.")
                     return
                 if self.owner.closing or not self.owner.busy:
                     return
@@ -437,19 +437,22 @@ class ConvertDialog:
         elif kind == "download":
             self.progress.stop()
             self.progress.configure(mode="determinate", maximum=event["total"], value=event["bytes"])
-            self.stage = f"Downloading model: {event['bytes'] / 1_000_000:.1f} / {event['total'] / 1_000_000:.1f} MB"
+            self.stage = f"Downloading Model: {event['bytes'] / 1_000_000:.1f} / {event['total'] / 1_000_000:.1f} MB"
         elif kind == "model_ready":
             self.model.set(event["path"])
         elif kind in ("success", "model_success"):
-            self.info.set(f"Saved: {event['path']}" if kind == "success" else "Model validated and ready.")
+            self.info.set(f"Saved: {event['path']}" if kind == "success" else "Model Validated and Ready.")
             self.started = None
             if kind == "success":
                 self.refresh()
         elif kind in ("error", "cancelled", "warning"):
             if kind != "warning":
                 self.started = None
-            self.info.set(event["message"])
-            self.owner.set_status(event["message"])
+            message = event["message"]
+            if kind == "cancelled" and message == "Conversion cancelled.":
+                message = "Conversion Cancelled."
+            self.info.set(message)
+            self.owner.set_status(message)
             if kind == "error":
                 messagebox.showerror(config.CONVERSION_TITLE,
                         event["message"] + "\n\nFor model problems, use Re-download model or Choose model file…", parent=self.window)

@@ -34,14 +34,14 @@ class SettingsWindow:
         tk.Label(self.window, text="Look", bg=theme.BACKGROUND_COLOR,
                  fg=theme.TEXT_COLOR, font=config.TITLE_FONT, anchor="w").pack(fill=tk.X, padx=16, pady=(16, 6))
         for name in THEMES:
-            tk.Radiobutton(self.window, text=name, variable=self.look, value=name,
+            tk.Radiobutton(self.window, text=name.replace("(current)", "(Current)"), variable=self.look, value=name,
                            command=lambda name=name: self.apply_theme(name),
                            bg=theme.BACKGROUND_COLOR, fg=theme.TEXT_COLOR,
                            selectcolor=theme.PANEL_COLOR, activebackground=theme.HOVER_COLOR,
                            activeforeground=theme.TEXT_COLOR, font=config.UI_FONT,
                            anchor="w").pack(fill=tk.X, padx=16, pady=2)
-        self.folder_row("MIDI folder", self.midi, self.choose_midi, self.clear_midi, theme)
-        self.folder_row("Audio folder for conversion", self.audio, self.choose_audio, None, theme)
+        self.folder_row("MIDI Folder", self.midi, self.choose_midi, self.clear_midi, theme)
+        self.folder_row("Audio Folder for Conversion", self.audio, self.choose_audio, None, theme)
 
     def folder_row(self, title, variable, choose, clear, theme):
         frame = tk.Frame(self.window, bg=theme.PANEL_COLOR)

@@ -47,6 +47,9 @@ from app_config import (
     WINDOW_SIZE,
 )
 
+INSTRUMENT_DISPLAY_NAMES = {key: key.title() for key in INSTRUMENTS}
+INSTRUMENT_KEYS = {name: key for key, name in INSTRUMENT_DISPLAY_NAMES.items()}
+
 # App state
 player = None
 conversion_ui = None
@@ -84,7 +87,7 @@ def update_playback_time(schedule=True):
     position = clock.position() if clock else 0
     duration = clock.duration if clock else 0
     remaining = math.ceil(clock.remaining()) if clock else 0
-    time_label.config(text=f"{format_time(position)} / {format_time(duration)}  ·  {format_time(remaining)} left")
+    time_label.config(text=f"{format_time(position)} / {format_time(duration)}  ·  {format_time(remaining)} Left")
     resize_progress()
     if schedule and clock and clock.remaining() > 0:
         time_update_id = root.after(200, update_playback_time)
@@ -149,7 +152,7 @@ def set_status(text):
 
 def set_now_playing(name=None):
     if now_playing_label is not None:
-        now_playing_label.config(text=name or "Nothing playing")
+        now_playing_label.config(text=name or "Nothing Playing")
 
 
 def highlight_keys(keys):
@@ -219,9 +222,9 @@ def add_converted_midi(path):
     try:
         save_playlist()
     except OSError as exc:
-        set_status(f"MIDI saved: {path}. Playlist could not be saved: {exc}")
+        set_status(f"MIDI Saved: {path}. Playlist Could Not Be Saved: {exc}")
         return
-    set_status(f"{'Converted' if idle else 'Added to playlist'}: {path}")
+    set_status(f"{'Converted' if idle else 'Added to Playlist'}: {path}")
 
 
 def close_app():
@@ -397,7 +400,7 @@ def load_midi():
         return
     for path in files:
         append_playlist_song(path)
-    set_status(f"{len(playlist)} files loaded")
+    set_status(f"{len(playlist)} Files Loaded")
     save_playlist()
 
 def delete_selected():
@@ -413,14 +416,14 @@ def delete_selected():
         playlist_box.select_set(current_index)
     else:
         current_index = None
-        set_status("No files loaded")
+        set_status("No Files Loaded")
     save_playlist()
 
 def play_selected():
     global loop_mode
     stop()
     if current_index is None:
-        messagebox.showwarning("Play", "Select a MIDI file first")
+        messagebox.showwarning("Play", "Select a MIDI File First")
         return
     try:
         events, duration = parse_midi(playlist[current_index]["path"])
@@ -446,7 +449,7 @@ def play_playlist():
             if loop_mode == "all" and playlist:
                 play_next(0)  # Loop back to start
             else:
-                set_status("Playlist finished")
+                set_status("Playlist Finished")
             return
         
         current_index = idx
@@ -475,7 +478,7 @@ def play_musical_chairs():
     musical_chairs_run_id += 1
     run_id = musical_chairs_run_id
     if not playlist:
-        messagebox.showwarning("Musical Chairs", "Load at least one MIDI file first")
+        messagebox.showwarning("Musical Chairs", "Load At Least One MIDI File First")
         return
 
     def play_excerpt():
@@ -509,7 +512,7 @@ def play_musical_chairs():
         def finish_musical_chairs():
             if run_id == musical_chairs_run_id:
                 cancel_playback()
-                set_status("Musical Chairs finished")
+                set_status("Musical Chairs Finished")
 
         schedule_song_end(excerpt_duration, finish_musical_chairs)
 
@@ -518,7 +521,7 @@ def play_musical_chairs():
 def pause_resume():
     global is_paused
     if not playback_active:
-        messagebox.showinfo("Pause", "No playback to pause")
+        messagebox.showinfo("Pause", "No Playback to Pause")
         return
     is_paused = not is_paused
     if playback_clock is not None:
@@ -537,7 +540,7 @@ def pause_resume():
 def skip_next():
     global current_index
     if current_index is None:
-        messagebox.showwarning("Skip", "No playlist loaded")
+        messagebox.showwarning("Skip", "No Playlist Loaded")
         return
     if len(playlist) == 0:
         return
@@ -551,7 +554,7 @@ def skip_next():
 def skip_previous():
     global current_index
     if current_index is None:
-        messagebox.showwarning("Skip", "No playlist loaded")
+        messagebox.showwarning("Skip", "No Playlist Loaded")
         return
     if len(playlist) == 0:
         return
@@ -597,11 +600,11 @@ def toggle_loop():
 
 def on_instrument_change(event=None):
     global current_instrument, player
-    current_instrument = instrument_var.get()
+    current_instrument = INSTRUMENT_KEYS[instrument_var.get()]
     if player:
         player.instrument = current_instrument
         player.set_layout_and_instrument(current_layout, current_instrument)
-    set_status(f"Instrument: {current_instrument}")
+    set_status(f"Instrument: {INSTRUMENT_DISPLAY_NAMES[current_instrument]}")
     save_instrument()
 
 # Saving songs
@@ -612,7 +615,7 @@ def load_saved_playlist():
     for path in load_playlist_paths():
         append_playlist_song(path)
     if playlist:
-        set_status(f"{len(playlist)} files loaded")
+        set_status(f"{len(playlist)} Files Loaded")
 
 def save_layout():
     try:
@@ -623,7 +626,7 @@ def save_layout():
 def load_layout():
     global current_layout, current_instrument
     current_layout, current_instrument = load_layout_settings()
-    instrument_var.set(current_instrument)
+    instrument_var.set(INSTRUMENT_DISPLAY_NAMES[current_instrument])
 
 def save_instrument():
     save_layout()  # Save both layout and instrument together
@@ -662,7 +665,7 @@ def scan_midi_folder():
                             os.path.splitext(entry.name)[1].lower() in (".mid", ".midi")),
                            key=lambda path: (os.path.basename(path).casefold(), path))
     except OSError as error:
-        set_status(f"Cannot read MIDI folder: {error}")
+        set_status(f"Cannot Read MIDI Folder: {error}")
         return
     added = 0
     for path in paths:
@@ -675,9 +678,9 @@ def scan_midi_folder():
         try:
             save_playlist()
         except OSError as error:
-            set_status(f"Playlist not saved: {error}")
+            set_status(f"Playlist Not Saved: {error}")
             return
-        set_status(f"Added {added} MIDI files from folder")
+        set_status(f"Added {added} MIDI Files from Folder")
 
 
 def set_midi_folder(folder):
@@ -713,7 +716,7 @@ def build_player_ui():
     selection = playlist_box.curselection() if playlist_box is not None else ()
     scroll = playlist_box.yview()[0] if playlist_box is not None else 0
     status = status_label.cget("text") if status_label is not None else DEFAULT_STATUS
-    song = now_playing_label.cget("text") if now_playing_label is not None else "Nothing playing"
+    song = now_playing_label.cget("text") if now_playing_label is not None else "Nothing Playing"
     for widget in root.winfo_children():
         if not isinstance(widget, tk.Toplevel):
             widget.destroy()
@@ -726,10 +729,10 @@ def build_player_ui():
 
     header = tk.Frame(root, bg=theme.BACKGROUND_COLOR)
     header.pack(fill=tk.X, padx=16, pady=(12, 8))
-    tk.Label(header, text="HEARTOPIA", bg=theme.BACKGROUND_COLOR,
+    tk.Label(header, text="Heartopia", bg=theme.BACKGROUND_COLOR,
              fg=theme.TEXT_COLOR, font=TITLE_FONT).pack(side=tk.LEFT)
     button(header, "⚙", open_settings, font=("Segoe UI", 12)).pack(side=tk.RIGHT, padx=(8, 0))
-    tk.Label(header, text="MIDI PLAYER", bg=theme.BACKGROUND_COLOR,
+    tk.Label(header, text="MIDI Player", bg=theme.BACKGROUND_COLOR,
              fg=theme.ACCENT_COLOR, font=UI_FONT).pack(side=tk.RIGHT)
     footer = tk.Frame(root, bg=theme.BACKGROUND_COLOR)
     footer.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=(2, 6))
@@ -768,11 +771,11 @@ def build_player_ui():
     root.bind("<Configure>", update_status_wrap)
 
     instrument_frame = tk.Frame(deck, bg=theme.CARD_COLOR)
-    tk.Label(instrument_frame, text="INSTRUMENT", bg=theme.CARD_COLOR,
+    tk.Label(instrument_frame, text="Instrument", bg=theme.CARD_COLOR,
              fg=theme.MUTED_TEXT_COLOR).pack(side=tk.LEFT, padx=(0, 8))
-    instrument_var = tk.StringVar(value=current_instrument)
+    instrument_var = tk.StringVar(value=INSTRUMENT_DISPLAY_NAMES[current_instrument])
     instrument_box = ttk.Combobox(instrument_frame, textvariable=instrument_var,
-                                  width=1, values=list(INSTRUMENTS), state="readonly",
+                                  width=1, values=list(INSTRUMENT_KEYS), state="readonly",
                                   style="Player.TCombobox", font=UI_FONT)
     instrument_box.pack(side=tk.LEFT, fill=tk.X, expand=True)
     instrument_box.bind("<<ComboboxSelected>>", on_instrument_change)
@@ -808,7 +811,7 @@ def build_player_ui():
            width=16).grid(row=0, column=1, padx=4, pady=3)
 
     playlist_card = tk.Frame(body, bg=theme.CARD_COLOR)
-    tk.Label(playlist_card, text="YOUR PLAYLIST · Double-click or Enter to play",
+    tk.Label(playlist_card, text="Your Playlist · Double-Click or Enter to Play",
              bg=theme.CARD_COLOR, fg=theme.MUTED_TEXT_COLOR,
              anchor="w", font=UI_FONT).pack(fill=tk.X, padx=10, pady=8)
     actions = tk.Frame(playlist_card, bg=theme.CARD_COLOR)
@@ -876,7 +879,7 @@ def main():
     conversion_ui = ConversionUI(root, add_converted_midi, set_status)
     build_player_ui()
     load_layout()
-    instrument_var.set(current_instrument)
+    instrument_var.set(INSTRUMENT_DISPLAY_NAMES[current_instrument])
     player = KeyboardPlayer(layout=current_layout, instrument=current_instrument)
     load_saved_playlist()
     scan_midi_folder()
