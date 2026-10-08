@@ -8,6 +8,18 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 
 <img width="362" height="632" alt="image" src="https://github.com/user-attachments/assets/4aa2eca2-4f78-4771-bd05-3d0c225b2883" />
 
+## UI design drafts
+
+The **five player UI drafts** are in [docs/ui-drafts/index.html](docs/ui-drafts/index.html),
+with a [comparison guide](docs/ui-drafts/README.md). These are design previews for
+choosing a look; they do not change the player.
+
+To view them, clone or download this repository, then double-click
+`docs/ui-drafts/index.html` to open it in your browser. No installation is needed,
+and it works offline. Use **All five** to compare or a numbered button to view one
+draft. On GitHub, the HTML link shows source code; open the downloaded file locally
+to see the designs.
+
 ---
 
 ## Features
