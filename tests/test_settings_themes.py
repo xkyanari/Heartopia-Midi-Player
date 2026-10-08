@@ -231,17 +231,24 @@ class PlayerThemeWidgetTests(unittest.TestCase):
             main.build_player_ui()
             main.playlist_box.select_set(0)
             main.set_status("Paused")
-            main.set_now_playing("song.mid")
+            song = "Gary Valenciano - Pasko Na, Sinta Ko.mid " * 4
+            main.set_now_playing(song)
             original_clock = main.playback_clock
             for name in THEMES:
                 with self.subTest(theme=name):
+                    old_title = main.now_playing_label
+                    old_timer = old_title._timer
                     main.apply_theme(name)
+                    if main.now_playing_label is not old_title:
+                        self.assertIsNone(old_title._timer)
+                        if old_timer is not None:
+                            self.assertNotIn(old_timer, self.root.tk.call("after", "info"))
                     self.assertEqual(main.playlist_box.size(), 1)
                     self.assertEqual(main.playlist_box.curselection(), (0,))
                     self.assertEqual(main.instrument_var.get(), "Violin")
                     self.assertEqual(main.loop_mode, "all")
                     self.assertEqual(main.status_label.cget("text"), "Paused")
-                    self.assertEqual(main.now_playing_label.cget("text"), "song.mid")
+                    self.assertEqual(main.now_playing_label.cget("text"), song)
                     self.assertIs(main.playback_clock, original_clock)
                     self.assertEqual(main.time_update_id, "timer")
                     self.assertEqual(main.playback_after_ids, ["scheduled-note"])
@@ -260,6 +267,7 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                     for size in (config.WINDOW_SIZE, "%dx%d" % self.root.minsize(), "720x800"):
                         self.root.geometry(size)
                         self.root.update()
+                        self.assertIsNotNone(main.now_playing_label._timer)
                         self.assertGreaterEqual(self.root.winfo_height(), self.root.winfo_reqheight())
                         for widget in widgets:
                             x = widget.winfo_rootx() - self.root.winfo_rootx()

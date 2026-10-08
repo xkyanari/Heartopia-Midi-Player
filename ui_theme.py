@@ -1,6 +1,7 @@
 """Player presentation helpers; importing this module creates no widgets."""
 import tkinter as tk
 from tkinter import ttk
+from tkinter import font as tkfont
 
 import app_config as config
 from themes import DEFAULT_THEME, resolve
@@ -33,6 +34,82 @@ def set_theme(name):
     _active = theme
     for callback in tuple(_subscribers):
         callback(theme)
+
+
+class MarqueeLabel(tk.Canvas):
+    """A single-line title that pauses and scrolls between its two ends."""
+
+    STEP = 2
+    INTERVAL = 35
+    PAUSE = 1500
+
+    def __init__(self, parent, *, text, font, bg, fg):
+        self._font = tkfont.Font(root=parent, font=font)
+        # Match a Label's vertical padding without requesting the text's width.
+        super().__init__(parent, width=1, height=self._font.metrics("linespace") + 4,
+                         bg=bg, highlightthickness=0, bd=0)
+        self._text = text
+        self._item = self.create_text(2, 2, text=text, font=self._font,
+                                      fill=fg, anchor="nw")
+        self._offset = 0
+        self._direction = 1
+        self._limit = 0
+        self._timer = None
+        self._destroyed = False
+        self.bind("<Configure>", self._restart)
+        # Also fires when a parent or Tcl destroys the widget.
+        self.bind("<Destroy>", self._on_destroy)
+
+    def configure(self, cnf=None, **options):
+        if isinstance(cnf, dict):
+            options = {**cnf, **options}
+            cnf = None
+        changed = "text" in options
+        text = options.pop("text", self._text)
+        result = super().configure(cnf, **options) if cnf is not None or options or not changed else None
+        if changed and text != self._text:
+            self._text = text
+            self.itemconfigure(self._item, text=text)
+            self._restart()
+        return result
+
+    config = configure
+
+    def cget(self, key):
+        return self._text if key == "text" else super().cget(key)
+
+    def _cancel_timer(self):
+        if self._timer is not None:
+            self.after_cancel(self._timer)
+            self._timer = None
+
+    def _restart(self, event=None):
+        if self._destroyed:
+            return
+        self._cancel_timer()
+        self._offset = 0
+        self._direction = 1
+        self.coords(self._item, 2, 2)
+        width = event.width if event is not None else self.winfo_width()
+        self._limit = max(0, self._font.measure(self._text) - max(0, width - 4))
+        if width > 4 and self._limit and self._text != "Nothing Playing":
+            self._timer = self.after(self.PAUSE, self._step)
+
+    def _step(self):
+        self._timer = None
+        if self._destroyed:
+            return
+        self._offset = max(0, min(self._limit, self._offset + self.STEP * self._direction))
+        self.coords(self._item, 2 - self._offset, 2)
+        at_end = self._offset in (0, self._limit)
+        if at_end:
+            self._direction *= -1
+        self._timer = self.after(self.PAUSE if at_end else self.INTERVAL, self._step)
+
+    def _on_destroy(self, event):
+        if event.widget is self:
+            self._destroyed = True
+            self._cancel_timer()
 
 
 class MidiVisualizer(tk.Canvas):
