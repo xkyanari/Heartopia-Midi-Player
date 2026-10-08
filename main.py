@@ -752,9 +752,9 @@ def build_player_ui():
     track_info.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
     tk.Label(track_info, text="Now Playing:", bg=theme.PANEL_COLOR,
              fg=theme.ACCENT_COLOR, font=UI_FONT, anchor="w").pack(fill=tk.X)
-    now_playing_label = tk.Label(track_info, text=song, bg=theme.PANEL_COLOR,
-                                fg=theme.TEXT_COLOR, font=("Segoe UI", theme.title_size, "bold"),
-                                anchor="w", width=1)
+    now_playing_label = ui_theme.MarqueeLabel(
+        track_info, text=song, bg=theme.PANEL_COLOR, fg=theme.TEXT_COLOR,
+        font=("Segoe UI", theme.title_size, "bold"))
     now_playing_label.pack(fill=tk.X, pady=(4, 0))
     status_label = tk.Label(track_info, text=status, bg=theme.PANEL_COLOR,
                             fg=theme.MUTED_TEXT_COLOR, font=UI_FONT, justify=tk.LEFT,
