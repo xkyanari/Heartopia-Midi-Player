@@ -2,6 +2,34 @@
 
 All notable changes to Heartopia MIDI Player are documented here.
 
+## 0.4.10 — 2026-10-07
+
+### Added
+- Added six selectable looks, a Settings window, and remembered MIDI and conversion audio folders.
+- Added a "Now Playing:" line showing the current song name, resetting to "Nothing playing" on stop or when the song ends.
+- Added a 12-bar visualizer that lights up for held notes and goes flat while paused.
+- Added double-click or Enter on a playlist row to play that song.
+- Added song lengths to each playlist row, showing `--:--` for unreadable files.
+- Added a progress bar with elapsed / total / remaining time that freezes while paused; playlist and loop transitions also wait for paused time.
+
+### Changed
+- Updated the player with flat midnight-blue panels, cyan accents, a decorative record graphic, and Segoe UI typography.
+- Updated the displayed version and Windows version metadata together; the title bar now also shows the version.
+
+## 0.4.9 — 2026-09-28
+
+### Added
+- Local solo-piano audio-to-MIDI conversion using the section-0 pinned CPU engine, including `audioread==3.1.0`.
+- Audio-folder list, Browse, Change folder, Refresh, model download/offline selection/re-download, elapsed-time progress and cancellation.
+- Spawned conversion workers with bounded shutdown, registered temporary-file cleanup, output validation and collision-safe Windows publication.
+- Separate `-standard` and `-convert` EXEs. Both build from the same snapshot in clean environments with one release-version increment.
+- Conversion playlist integration that preserves active/paused playback and queued transitions. MIDI pedal CC64 is retained; audible pedal playback remains unsupported.
+
+### Changed
+- Restructured the main entry point for safe source and frozen multiprocessing startup.
+- Settings now use locked, atomic read-merge-write updates, preserving unrelated keys across instances; save timeouts warn without losing session settings.
+- Added release orchestration and source/conversion setup documentation. The existing spec version-bump logic is unchanged.
+
 ## 2026-09-08
 
 ### Added
