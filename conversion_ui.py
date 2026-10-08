@@ -9,6 +9,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 import app_config as config
+import ui_theme
 from conversion_service import ConversionService, model_destination
 
 
@@ -112,7 +113,7 @@ class ConversionUI:
 class ConvertDialog:
     def __init__(self, owner):
         self.owner = owner
-        self.window = tk.Toplevel(owner.root, bg=config.BACKGROUND_COLOR)
+        self.window = tk.Toplevel(owner.root, bg=ui_theme.current().BACKGROUND_COLOR)
         self.window.title(config.CONVERSION_TITLE)
         self.window.geometry(config.CONVERSION_DIALOG_SIZE)
         self.window.minsize(650, 540)
@@ -128,14 +129,117 @@ class ConvertDialog:
         self.started = self.transcribe_started = self.estimate = None
         self.stage = ""
         self.controls = []
+        self._colours = []
+        self._buttons = []
+        self.window.columnconfigure(0, weight=1)
+        self.window.rowconfigure(2, weight=1)
 
-        self.label(config.CONVERSION_SCOPE_TEXT).pack(fill=tk.X, padx=12, pady=(10, 2))
-        self.label(config.CONVERSION_CPU_TEXT).pack(fill=tk.X, padx=12, pady=(0, 8))
-        self.label(variable=self.folder).pack(fill=tk.X, padx=12)
-        toolbar = tk.Frame(self.window, bg=config.BACKGROUND_COLOR)
-        toolbar.pack(fill=tk.X, padx=12, pady=5)
+        header = self.frame(self.window, "BACKGROUND_COLOR")
+        header.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 8))
+        self.label("CONVERT AUDIO", parent=header, background="BACKGROUND_COLOR",
+                   font=config.TITLE_FONT).pack(side=tk.LEFT)
+        self.label("PIANO TO MIDI", parent=header, background="BACKGROUND_COLOR",
+                   foreground="ACCENT_COLOR").pack(side=tk.RIGHT)
+
+        info_card = self.card(1)
+        self.label(config.CONVERSION_SCOPE_TEXT, parent=info_card).pack(fill=tk.X, padx=10, pady=(8, 0))
+        self.label(config.CONVERSION_CPU_TEXT, parent=info_card,
+                   foreground="MUTED_TEXT_COLOR").pack(fill=tk.X, padx=10)
+        self.path_field(info_card, self.folder).pack(fill=tk.X, padx=10, pady=(4, 0))
+        toolbar = self.frame(info_card)
+        toolbar.pack(fill=tk.X, padx=10, pady=(4, 8))
         for key, command in (("folder", self.change_folder), ("refresh", self.refresh), ("browse", self.browse)):
             self.button(toolbar, config.CONVERSION_BUTTONS[key], command).pack(side=tk.LEFT, padx=(0, 6))
+        files_card = self.card(2)
+        self.label("AUDIO FILES", parent=files_card, foreground="MUTED_TEXT_COLOR").pack(
+            fill=tk.X, padx=10, pady=6)
+        table = self.frame(files_card)
+        table.pack(fill=tk.BOTH, expand=True, padx=10)
+        self.tree = ttk.Treeview(table, columns=("name", "size", "modified", "midi"),
+                                 show="headings", selectmode="browse", style="Conversion.Treeview", height=5)
+        for key, title, width in (("name", "File name", 220), ("size", "Size", 80),
+                                  ("modified", "Modified", 145), ("midi", "MIDI", 95)):
+            self.tree.heading(key, text=title)
+            self.tree.column(key, width=width, minwidth=50, stretch=key == "name")
+        self.scroll = ttk.Scrollbar(table, orient=tk.VERTICAL, command=self.tree.yview,
+                                    style="Conversion.Vertical.TScrollbar")
+        self.tree.configure(yscrollcommand=self.scroll.set)
+        self.scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.tree.bind("<<TreeviewSelect>>", self.select)
+        self.path_field(files_card, self.source).pack(fill=tk.X, padx=10, pady=(4, 6))
+
+        model_card = self.card(3)
+        self.label("PIANO MODEL", parent=model_card, foreground="MUTED_TEXT_COLOR").pack(
+            fill=tk.X, padx=10, pady=(6, 0))
+        self.path_field(model_card, self.model).pack(fill=tk.X, padx=10, pady=(2, 0))
+        models = self.frame(model_card)
+        models.pack(fill=tk.X, padx=10, pady=(4, 6))
+        self.button(models, config.CONVERSION_BUTTONS["model"], self.choose_model).pack(side=tk.LEFT, padx=(0, 6))
+        self.button(models, config.CONVERSION_BUTTONS["download"], self.redownload).pack(side=tk.LEFT)
+
+        status_card = self.card(4)
+        self.progress = ttk.Progressbar(status_card, mode="indeterminate",
+                                        style="Conversion.Horizontal.TProgressbar")
+        self.progress.pack(fill=tk.X, padx=10, pady=(8, 4))
+        self.label(variable=self.info, parent=status_card).pack(fill=tk.X, padx=10, pady=(0, 4))
+        actions = self.frame(status_card)
+        actions.pack(fill=tk.X, padx=10, pady=(0, 8))
+        self.button(actions, config.CONVERSION_BUTTONS["convert"], self.convert, accent=True).pack(side=tk.LEFT)
+        self.button(actions, config.CONVERSION_BUTTONS["cancel"], self.cancel, busy_enabled=True).pack(side=tk.RIGHT)
+        self.apply_theme(ui_theme.current())
+        self.unsubscribe = ui_theme.subscribe(self.apply_theme)
+        self.window.bind("<Destroy>", self._destroyed, add="+")
+        self.refresh()
+
+    def frame(self, parent, background="CARD_COLOR", **options):
+        widget = tk.Frame(parent, bg=getattr(ui_theme.current(), background), **options)
+        self._colours.append((widget, {"bg": background}))
+        return widget
+
+    def card(self, row):
+        card = self.frame(self.window)
+        card.grid(row=row, column=0, sticky="nsew", padx=12, pady=(0, 6))
+        self.frame(card, "ACCENT_COLOR", height=2).pack(fill=tk.X)
+        return card
+
+    def label(self, text=None, variable=None, *, parent=None, background="CARD_COLOR",
+              foreground="TEXT_COLOR", font=config.UI_FONT):
+        widget = tk.Label(parent or self.window, text=text, textvariable=variable,
+                          bg=getattr(ui_theme.current(), background),
+                          fg=getattr(ui_theme.current(), foreground), font=font,
+                          anchor="w", justify=tk.LEFT, wraplength=600)
+        widget.bind("<Configure>", lambda event: widget.configure(wraplength=max(1, event.width)))
+        self._colours.append((widget, {"bg": background, "fg": foreground}))
+        return widget
+
+    def path_field(self, parent, variable):
+        # Selectable, single-line paths cannot grow the cards beyond the window.
+        widget = tk.Entry(parent, textvariable=variable, state="readonly", relief=tk.FLAT,
+                          bd=0, highlightthickness=0, font=config.UI_FONT)
+        self._colours.append((widget, {"readonlybackground": "CARD_COLOR",
+                                      "fg": "MUTED_TEXT_COLOR",
+                                      "selectbackground": "SELECTION_COLOR",
+                                      "selectforeground": "TEXT_COLOR"}))
+        return widget
+
+    def button(self, parent, text, command, busy_enabled=False, *, accent=False):
+        button = ui_theme.button(parent, text, command, accent=accent)
+        self._buttons.append((button, accent))
+        if not busy_enabled:
+            self.controls.append(button)
+        return button
+
+    def _destroyed(self, event):
+        if event.widget is self.window:
+            self.unsubscribe()
+
+    def apply_theme(self, theme):
+        self.window.configure(bg=theme.BACKGROUND_COLOR)
+        for widget, colours in self._colours:
+            widget.configure(**{option: getattr(theme, role) for option, role in colours.items()})
+        for button, accent in self._buttons:
+            ui_theme.style_button(button, accent=accent)
         style = ttk.Style(self.window)
         # Windows' native tree field ignores fieldbackground. Clone only these
         # elements from clam so the conversion table is dark without retheming
@@ -149,49 +253,40 @@ class ConvertDialog:
         style.layout("Conversion.Treeview.Heading", [("Conversion.Treeheading.cell", {
             "sticky": "nswe", "children": [("Treeheading.padding", {
                 "sticky": "nswe", "children": [("Treeheading.text", {"sticky": "we"})]})]})])
-        style.configure("Conversion.Treeview", background=config.PANEL_COLOR,
-                        fieldbackground=config.PANEL_COLOR, foreground=config.TEXT_COLOR)
-        style.configure("Conversion.Treeview.Heading", background=config.BUTTON_COLOR, foreground=config.BUTTON_TEXT_COLOR)
-        style.map("Conversion.Treeview", background=[("selected", config.SELECTION_COLOR)],
-                  foreground=[("selected", config.TEXT_COLOR)])
-        table = tk.Frame(self.window, bg=config.BACKGROUND_COLOR)
-        table.pack(fill=tk.BOTH, expand=True, padx=12)
-        self.tree = ttk.Treeview(table, columns=("name", "size", "modified", "midi"),
-                                 show="headings", selectmode="browse", style="Conversion.Treeview", height=8)
-        for key, title, width in (("name", "File name", 340), ("size", "Size", 80),
-                                  ("modified", "Modified", 145), ("midi", "MIDI", 95)):
-            self.tree.heading(key, text=title)
-            self.tree.column(key, width=width, minwidth=50, stretch=key == "name")
-        scroll = ttk.Scrollbar(table, orient=tk.VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.tree.bind("<<TreeviewSelect>>", self.select)
-        self.label(variable=self.source).pack(fill=tk.X, padx=12, pady=(6, 0))
-        self.label(variable=self.model).pack(fill=tk.X, padx=12, pady=(6, 0))
-        models = tk.Frame(self.window, bg=config.BACKGROUND_COLOR)
-        models.pack(fill=tk.X, padx=12, pady=5)
-        self.button(models, config.CONVERSION_BUTTONS["model"], self.choose_model).pack(side=tk.LEFT, padx=(0, 6))
-        self.button(models, config.CONVERSION_BUTTONS["download"], self.redownload).pack(side=tk.LEFT)
-        self.progress = ttk.Progressbar(self.window, mode="indeterminate")
-        self.progress.pack(fill=tk.X, padx=12, pady=5)
-        self.label(variable=self.info).pack(fill=tk.X, padx=12, pady=(2, 6))
-        actions = tk.Frame(self.window, bg=config.BACKGROUND_COLOR)
-        actions.pack(fill=tk.X, padx=12, pady=(0, 12))
-        self.button(actions, config.CONVERSION_BUTTONS["convert"], self.convert).pack(side=tk.LEFT)
-        self.button(actions, config.CONVERSION_BUTTONS["cancel"], self.cancel, busy_enabled=True).pack(side=tk.RIGHT)
-        self.refresh()
-
-    def label(self, text=None, variable=None):
-        return tk.Label(self.window, text=text, textvariable=variable, bg=config.BACKGROUND_COLOR,
-                        fg=config.TEXT_COLOR, anchor="w", justify=tk.LEFT, wraplength=700)
-
-    def button(self, parent, text, command, busy_enabled=False):
-        button = tk.Button(parent, text=text, command=command, bg=config.BUTTON_COLOR,
-                           fg=config.BUTTON_TEXT_COLOR, disabledforeground=config.FOOTER_TEXT_COLOR)
-        if not busy_enabled:
-            self.controls.append(button)
-        return button
+        style.configure("Conversion.Treeview", background=theme.PANEL_COLOR,
+                        fieldbackground=theme.PANEL_COLOR, foreground=theme.TEXT_COLOR,
+                        bordercolor=theme.SEPARATOR_COLOR, font=config.UI_FONT, rowheight=24)
+        style.configure("Conversion.Treeview.Heading", background=theme.BUTTON_COLOR,
+                        foreground=theme.BUTTON_TEXT_COLOR, font=config.UI_FONT,
+                        bordercolor=theme.SEPARATOR_COLOR, lightcolor=theme.BUTTON_COLOR,
+                        darkcolor=theme.BUTTON_COLOR)
+        style.map("Conversion.Treeview", background=[("selected", theme.SELECTION_COLOR)],
+                  foreground=[("selected", theme.TEXT_COLOR)])
+        style.map("Conversion.Treeview.Heading", background=[("active", theme.HOVER_COLOR)])
+        for name, source in (("Conversion.Progressbar.trough", "Progressbar.trough"),
+                             ("Conversion.Progressbar.pbar", "Progressbar.pbar"),
+                             ("Conversion.Scrollbar.trough", "Scrollbar.trough"),
+                             ("Conversion.Scrollbar.thumb", "Scrollbar.thumb"),
+                             ("Conversion.Scrollbar.uparrow", "Scrollbar.uparrow"),
+                             ("Conversion.Scrollbar.downarrow", "Scrollbar.downarrow")):
+            if name not in style.element_names():
+                style.element_create(name, "from", "clam", source)
+        style.layout("Conversion.Horizontal.TProgressbar", [("Conversion.Progressbar.trough", {
+            "sticky": "nswe", "children": [("Conversion.Progressbar.pbar", {"side": "left", "sticky": "ns"})]})])
+        style.configure("Conversion.Horizontal.TProgressbar", troughcolor=theme.SEPARATOR_COLOR,
+                        background=theme.ACCENT_COLOR, bordercolor=theme.SEPARATOR_COLOR,
+                        lightcolor=theme.ACCENT_COLOR, darkcolor=theme.ACCENT_COLOR)
+        style.layout("Conversion.Vertical.TScrollbar", [("Conversion.Scrollbar.trough", {
+            "sticky": "ns", "children": [
+                ("Conversion.Scrollbar.uparrow", {"side": "top", "sticky": ""}),
+                ("Conversion.Scrollbar.downarrow", {"side": "bottom", "sticky": ""}),
+                ("Conversion.Scrollbar.thumb", {"expand": "1", "sticky": "nswe"})]})])
+        style.configure("Conversion.Vertical.TScrollbar", troughcolor=theme.PANEL_COLOR,
+                        background=theme.BUTTON_COLOR, arrowcolor=theme.BUTTON_TEXT_COLOR,
+                        bordercolor=theme.SEPARATOR_COLOR, lightcolor=theme.BUTTON_COLOR,
+                        darkcolor=theme.BUTTON_COLOR)
+        style.map("Conversion.Vertical.TScrollbar", background=[("active", theme.HOVER_COLOR),
+                                                               ("pressed", theme.ACCENT_COLOR)])
 
     def refresh(self):
         self.scan_token = uuid.uuid4().hex
@@ -283,6 +378,7 @@ class ConvertDialog:
             self.cancel()
         else:
             self.owner.dialog = None
+            self.unsubscribe()
             self.window.destroy()
 
     def tick(self):
