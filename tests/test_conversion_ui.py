@@ -33,7 +33,10 @@ class FakeService:
 
 class DialogTests(unittest.TestCase):
     def setUp(self):
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except tk.TclError as error:
+            self.skipTest(f"Tk display unavailable: {error}")
         self.root.withdraw()
         self.addCleanup(self.root.destroy)
         self.service = FakeService()
@@ -64,7 +67,7 @@ class DialogTests(unittest.TestCase):
     def test_folder_scan_refresh_empty_error_and_stale_reply(self):
         row = {"path": "C:/audio/piano.wav", "name": "piano.wav", "size": 2000, "modified": 0, "midi": True}
         self.dialog.handle({"type": "scan", "token": self.dialog.scan_token, "rows": [row]})
-        self.assertEqual(self.dialog.tree.item("0", "values")[-1], "MIDI exists")
+        self.assertEqual(self.dialog.tree.item("0", "values")[-1], "MIDI Exists")
         old_token = self.dialog.scan_token
         self.dialog.refresh()
         self.dialog.handle({"type": "scan", "token": old_token, "rows": []})
@@ -72,7 +75,7 @@ class DialogTests(unittest.TestCase):
         self.dialog.handle({"type": "scan", "token": self.dialog.scan_token, "rows": []})
         self.assertEqual(self.dialog.info.get(), config.CONVERSION_EMPTY_TEXT)
         self.dialog.handle({"type": "scan_error", "token": self.dialog.scan_token, "message": "Access denied"})
-        self.assertIn("Change folder", self.dialog.info.get())
+        self.assertIn("Change Folder", self.dialog.info.get())
         with patch("conversion_ui.filedialog.askdirectory", return_value="D:/new"):
             self.dialog.change_folder()
         self.assertEqual(self.ui.settings["audio_input_folder"], "D:/new")
@@ -138,6 +141,7 @@ class DialogTests(unittest.TestCase):
                 self.dialog.cancel()
                 self.assertTrue(self.ui.busy)
                 self.dialog.handle({"type": "cancelled", "message": "Conversion cancelled."})
+                self.assertEqual(self.dialog.info.get(), "Conversion Cancelled.")
                 self.dialog.handle({"type": "finished"})
                 self.assertFalse(self.ui.busy)
         self.assertEqual(self.service.cancel.call_count, len(config.CONVERSION_STAGES))
@@ -324,7 +328,10 @@ class IntegrationTests(unittest.TestCase):
 
 class PlaylistTests(unittest.TestCase):
     def setUp(self):
-        self.root = tk.Tk()
+        try:
+            self.root = tk.Tk()
+        except tk.TclError as error:
+            self.skipTest(f"Tk display unavailable: {error}")
         self.root.withdraw()
         self.addCleanup(self.root.destroy)
         box = tk.Listbox(self.root, exportselection=False)
@@ -353,7 +360,7 @@ class PlaylistTests(unittest.TestCase):
                 main.add_converted_midi("new.mid")
                 self.assertEqual(main.current_index, 0)
                 self.assertEqual(main.playlist_box.curselection(), (0,))
-                self.assertIn("Added to playlist", self.status.call_args.args[0])
+                self.assertIn("Added to Playlist", self.status.call_args.args[0])
 
     def test_playlist_save_error_keeps_file_and_reports_path(self):
         with tempfile.TemporaryDirectory() as directory:
