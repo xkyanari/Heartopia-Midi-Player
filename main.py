@@ -95,11 +95,18 @@ def update_playback_time(schedule=True):
 
 def song_title(path):
     """Build a display title without changing the song's file path."""
+    import re
+
     basename = os.path.basename(path)
     stem, extension = os.path.splitext(basename)
     name = stem if extension.lower() in (".mid", ".midi") else basename
-    words = name.replace("-", " ").replace("_", " ").split()
-    return " ".join(word[0].upper() + word[1:] for word in words) or stem or basename
+    parts = re.split(r"[\s_]+-+(?:[\s_]+-+)*[\s_]+", name)
+    titles = []
+    for part in parts:
+        words = part.replace("-", " ").replace("_", " ").split()
+        if words:
+            titles.append(" ".join(word[0].upper() + word[1:] for word in words))
+    return " - ".join(titles) or stem or basename
 
 
 def append_playlist_song(path):
