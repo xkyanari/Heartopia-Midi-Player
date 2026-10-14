@@ -6,6 +6,7 @@ import random
 import math
 import mido
 from playback_timing import PlaybackClock, format_time
+from playlist_widget import PlaylistView
 import ui_theme
 from themes import playback_labels
 from ui_theme import MidiVisualizer, button, style_combobox
@@ -34,7 +35,6 @@ from app_config import (
     KEY_HOLD_MS,
     MUSICAL_CHAIRS_MAX_SECONDS,
     MUSICAL_CHAIRS_MIN_SECONDS,
-    PLAYLIST_FONT,
     PAUSE_POLL_INTERVAL_MS,
     PLAYBACK_BUTTONS,
     PLAYBACK_SPEED,
@@ -93,16 +93,37 @@ def update_playback_time(schedule=True):
         time_update_id = root.after(200, update_playback_time)
 
 
+def song_title(path):
+    """Build a display title without changing the song's file path."""
+    import re
+
+    basename = os.path.basename(path)
+    stem, extension = os.path.splitext(basename)
+    name = stem if extension.lower() in (".mid", ".midi") else basename
+    parts = re.split(r"[\s_]+-+(?:[\s_]+-+)*[\s_]+", name)
+    titles = []
+    for part in parts:
+        words = part.replace("-", " ").replace("_", " ").split()
+        if words:
+            titles.append(" ".join(word[0].upper() + word[1:] for word in words))
+    return " - ".join(titles) or stem or basename
+
+
+def playlist_row_values(entry):
+    """Keep title and duration separate for both inserts and theme rebuilds."""
+    duration = entry.get("duration")
+    return entry["name"], format_time(duration) if duration is not None else "--:--"
+
+
 def append_playlist_song(path):
     # Invalid files stay removable in the library and report errors when played.
     try:
         duration = mido.MidiFile(path).length
     except Exception:
         duration = None
-    name = os.path.basename(path)
+    name = song_title(path)
     playlist.append({"name": name, "path": path, "duration": duration})
-    length = format_time(duration) if duration is not None else "--:--"
-    playlist_box.insert(tk.END, f"{name}  ·  {length}")
+    playlist_box.insert(tk.END, playlist_row_values(playlist[-1]))
 
 
 def activate_playlist_song(event=None):
@@ -823,16 +844,12 @@ def build_player_ui():
     conversion_ui.attach_button(convert_button)
     library = tk.Frame(playlist_card, bg=theme.CARD_COLOR)
     library.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
-    playlist_box = tk.Listbox(library, bg=theme.PANEL_COLOR, fg=theme.TEXT_COLOR,
-                              selectbackground=theme.SELECTION_COLOR, selectforeground=theme.TEXT_COLOR,
-                              font=PLAYLIST_FONT, exportselection=False, height=5,
-                              highlightthickness=1, highlightbackground=theme.SEPARATOR_COLOR,
-                              highlightcolor=theme.ACCENT_COLOR, bd=0, relief=tk.FLAT, activestyle="none")
+    playlist_box = PlaylistView(library, theme)
     scrollbar = tk.Scrollbar(library, orient=tk.VERTICAL, command=playlist_box.yview)
     scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
     playlist_box.config(yscrollcommand=scrollbar.set)
     playlist_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-    playlist_box.bind("<<ListboxSelect>>", on_playlist_select)
+    playlist_box.bind("<<TreeviewSelect>>", on_playlist_select)
     playlist_box.bind("<Double-Button-1>", activate_playlist_song)
     playlist_box.bind("<Return>", activate_playlist_song)
 
@@ -851,13 +868,10 @@ def build_player_ui():
         loop_frame.pack(pady=(0, 5))
         playlist_card.pack(fill=tk.BOTH, expand=True, padx=12, pady=4)
     for entry in playlist:
-        duration = entry.get("duration")
-        length = format_time(duration) if duration is not None else "--:--"
-        playlist_box.insert(tk.END, f"{entry['name']}  ·  {length}")
+        playlist_box.insert(tk.END, playlist_row_values(entry))
     for index in selection:
         playlist_box.select_set(index)
         playlist_box.activate(index)
-    playlist_box.yview_moveto(scroll)
     highlight_keys(pressed_keys)
     update_playback_time(schedule=False)
     # Measure the finished layout using the actual Tk fonts/DPI. A fixed height
@@ -865,6 +879,7 @@ def build_player_ui():
     root.update_idletasks()
     minimum_width, minimum_height = root.minsize()
     root.minsize(minimum_width, max(minimum_height, root.winfo_reqheight()))
+    playlist_box.yview_moveto(scroll)
 
 
 def main():
