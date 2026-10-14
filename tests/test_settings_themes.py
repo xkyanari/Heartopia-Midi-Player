@@ -245,6 +245,10 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                             self.assertNotIn(old_timer, self.root.tk.call("after", "info"))
                     self.assertEqual(main.playlist_box.size(), 1)
                     self.assertEqual(main.playlist_box.curselection(), (0,))
+                    item = main.playlist_box.get_children()[0]
+                    self.assertEqual(tuple(main.playlist_box.item(item, "values")), ("song.mid", "1:30"))
+                    self.assertEqual(str(main.playlist_box.column("length", "anchor")), "e")
+                    self.assertFalse(main.playlist_box.column("length", "stretch"))
                     self.assertEqual(main.instrument_var.get(), "Violin")
                     self.assertEqual(main.loop_mode, "all")
                     self.assertEqual(main.status_label.cget("text"), "Paused")
@@ -277,6 +281,30 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                             self.assertLessEqual(x + widget.winfo_width(), self.root.winfo_width())
                             self.assertLessEqual(y + widget.winfo_height(), self.root.winfo_height())
                         self.assertGreaterEqual(main.playlist_box.winfo_height(), 60)
+                        title_cell = main.playlist_box.bbox(item, "title")
+                        length_cell = main.playlist_box.bbox(item, "length")
+                        self.assertEqual(title_cell[0] + title_cell[2], length_cell[0])
+                        self.assertAlmostEqual(length_cell[0] + length_cell[2],
+                                               main.playlist_box.winfo_width(), delta=2)
+
+    def test_playlist_rebuild_preserves_scroll_selection_and_long_title(self):
+        main.playlist = [{"name": "Long Song Title " * 30, "path": "song.mid", "duration": 90}
+                         for _ in range(100)]
+        main.build_player_ui()
+        main.playlist_box.select_set(60)
+        main.playlist_box.activate(60)
+        main.playlist_box.yview_moveto(0.4)
+        self.root.update_idletasks()
+        scroll = main.playlist_box.yview()[0]
+        with patch.object(main, "playlist_row_values", wraps=main.playlist_row_values) as values:
+            main.build_player_ui()
+        self.assertEqual(values.call_count, 100)
+        self.assertEqual(main.playlist_box.curselection(), (60,))
+        self.assertEqual(main.playlist_box.focus(), main.playlist_box.get_children()[60])
+        self.assertAlmostEqual(main.playlist_box.yview()[0], scroll, delta=0.01)
+        item = main.playlist_box.get_children()[40]
+        self.assertEqual(tuple(main.playlist_box.item(item, "values")),
+                         ("Long Song Title " * 30, "1:30"))
 
     def test_settings_singleton_and_live_palette(self):
         main.build_player_ui()
