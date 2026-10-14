@@ -56,7 +56,7 @@ class SongTitleTests(unittest.TestCase):
             self.assertEqual(main.playlist, [
                 {"name": "Payon Theme", "path": path, "duration": 60},
             ])
-        playlist_box.insert.assert_called_once_with(main.tk.END, "Payon Theme  ·  1:00")
+        playlist_box.insert.assert_called_once_with(main.tk.END, ("Payon Theme", "1:00"))
 
 
 if __name__ == "__main__":
