@@ -93,13 +93,22 @@ def update_playback_time(schedule=True):
         time_update_id = root.after(200, update_playback_time)
 
 
+def song_title(path):
+    """Build a display title without changing the song's file path."""
+    basename = os.path.basename(path)
+    stem, extension = os.path.splitext(basename)
+    name = stem if extension.lower() in (".mid", ".midi") else basename
+    words = name.replace("-", " ").replace("_", " ").split()
+    return " ".join(word[0].upper() + word[1:] for word in words) or stem or basename
+
+
 def append_playlist_song(path):
     # Invalid files stay removable in the library and report errors when played.
     try:
         duration = mido.MidiFile(path).length
     except Exception:
         duration = None
-    name = os.path.basename(path)
+    name = song_title(path)
     playlist.append({"name": name, "path": path, "duration": duration})
     length = format_time(duration) if duration is not None else "--:--"
     playlist_box.insert(tk.END, f"{name}  ·  {length}")
