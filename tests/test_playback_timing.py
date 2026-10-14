@@ -33,7 +33,7 @@ class PlaylistInteractionTests(unittest.TestCase):
                 patch.object(main, "playlist_box", Mock(), create=True) as box, \
                 patch.object(main.mido, "MidiFile", return_value=Mock(length=125)):
             main.append_playlist_song("song.mid")
-            box.insert.assert_called_once_with(main.tk.END, "song.mid  ·  2:05")
+            box.insert.assert_called_once_with(main.tk.END, "Song  ·  2:05")
             self.assertEqual(main.playlist[0]["path"], "song.mid")
 
     def test_unreadable_file_remains_removable(self):
@@ -41,7 +41,7 @@ class PlaylistInteractionTests(unittest.TestCase):
                 patch.object(main, "playlist_box", Mock(), create=True) as box, \
                 patch.object(main.mido, "MidiFile", side_effect=OSError("missing")):
             main.append_playlist_song("missing.mid")
-            box.insert.assert_called_once_with(main.tk.END, "missing.mid  ·  --:--")
+            box.insert.assert_called_once_with(main.tk.END, "Missing  ·  --:--")
             self.assertIsNone(main.playlist[0]["duration"])
 
     def test_enter_or_double_click_plays_selection_and_empty_list_is_safe(self):
