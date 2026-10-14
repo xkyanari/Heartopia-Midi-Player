@@ -27,6 +27,25 @@ class SongTitleTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(main.song_title(path), expected)
 
+    def test_artist_separators(self):
+        cases = (
+            ("ABBA - Chiquitita.mid", "ABBA - Chiquitita"),
+            ("a-ha - take on me (unplugged).mid", "A Ha - Take On Me (unplugged)"),
+            ("ABBA_-_Dancing_Queen.mid", "ABBA - Dancing Queen"),
+            ("A1  -  heaven by your side.MIDI", "A1 - Heaven By Your Side"),
+            ("ABBA - - Chiquitita.mid", "ABBA - Chiquitita"),
+            ("ABBA -- Chiquitita.mid", "ABBA - Chiquitita"),
+            ("ABBA_-__-_Chiquitita.mid", "ABBA - Chiquitita"),
+            ("ABBA\t-\tchiquitita.mid", "ABBA - Chiquitita"),
+            (" - intro.mid", "Intro"),
+            ("intro - .mid", "Intro"),
+            ("_-_intro_-_.mid", "Intro"),
+            (" - - .mid", " - - "),
+        )
+        for path, expected in cases:
+            with self.subTest(path=path):
+                self.assertEqual(main.song_title(path), expected)
+
     def test_playlist_uses_title_and_preserves_path(self):
         path = "C:/songs/payon-theme.mid"
         playlist_box = Mock()
