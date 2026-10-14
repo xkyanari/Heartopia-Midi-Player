@@ -247,7 +247,7 @@ class PlayerThemeWidgetTests(unittest.TestCase):
                     self.assertEqual(main.playlist_box.curselection(), (0,))
                     item = main.playlist_box.get_children()[0]
                     self.assertEqual(tuple(main.playlist_box.item(item, "values")), ("song.mid", "1:30"))
-                    self.assertEqual(main.playlist_box.column("length", "anchor"), "e")
+                    self.assertEqual(str(main.playlist_box.column("length", "anchor")), "e")
                     self.assertFalse(main.playlist_box.column("length", "stretch"))
                     self.assertEqual(main.instrument_var.get(), "Violin")
                     self.assertEqual(main.loop_mode, "all")
