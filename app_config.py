@@ -44,6 +44,13 @@ SONG_END_BUFFER_SECONDS = 6
 MUSICAL_CHAIRS_MIN_SECONDS = 15
 MUSICAL_CHAIRS_MAX_SECONDS = 25
 
+# Arrangement: fit each song to the selected instrument before playback.
+ARRANGE_MIN_VELOCITY = 20  # Quieter notes are usually transcription ghosts.
+ARRANGE_MIN_DURATION_MS = 40
+ARRANGE_CHORD_WINDOW_MS = 20  # Onsets this close together play as one chord.
+ARRANGE_MAX_CHORD = {"piano": 4}
+ARRANGE_DEFAULT_MAX_CHORD = 3
+
 HEARTOPIA_WINDOW_TITLES = ("Heartopia", "Heartopia.exe", "Heartopia Game")
 
 FILE_BUTTONS = {

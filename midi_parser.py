@@ -25,26 +25,26 @@ def parse_midi(path: str):
             name, octave = midi_to_note(msg.note)
             if msg.velocity > 0:
                 # Note on - start tracking
-                active_notes[msg.note] = current_time
+                active_notes[msg.note] = (current_time, msg.velocity)
             else:
                 # Note off (velocity 0)
                 if msg.note in active_notes:
-                    start_time = active_notes.pop(msg.note)
+                    start_time, velocity = active_notes.pop(msg.note)
                     duration_ms = int((current_time - start_time) * 1000)
-                    event_notes[start_time].append((name, octave, duration_ms))
+                    event_notes[start_time].append((name, octave, duration_ms, velocity))
         elif msg.type == "note_off":
             name, octave = midi_to_note(msg.note)
             if msg.note in active_notes:
-                start_time = active_notes.pop(msg.note)
+                start_time, velocity = active_notes.pop(msg.note)
                 duration_ms = int((current_time - start_time) * 1000)
-                event_notes[start_time].append((name, octave, duration_ms))
+                event_notes[start_time].append((name, octave, duration_ms, velocity))
 
     # Handle notes that never got a note_off
     end_time = current_time
-    for note, start_time in list(active_notes.items()):
+    for note, (start_time, velocity) in list(active_notes.items()):
         name, octave = midi_to_note(note)
         duration_ms = int((end_time - start_time) * 1000)
-        event_notes[start_time].append((name, octave, duration_ms))
+        event_notes[start_time].append((name, octave, duration_ms, velocity))
 
     sorted_event_times = sorted(event_notes.keys())
     last_time = sorted_event_times[0] if sorted_event_times else 0.0

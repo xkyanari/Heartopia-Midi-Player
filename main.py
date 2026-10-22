@@ -18,6 +18,7 @@ from app_storage import (
     save_playlist_paths,
     save_settings,
 )
+from arrange import arrange
 from midi_parser import parse_midi
 from keyboard_player import KeyboardPlayer, INSTRUMENTS
 from keyboard_layout import press_key, release_key
@@ -354,6 +355,18 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
     rid = root.after(PLAYBACK_START_DELAY_MS, lambda: play_note_index(0))
     playback_after_ids.append(rid)
 
+def load_song(path):
+    """Parse a MIDI file and fit it to the current instrument."""
+    events, duration = parse_midi(path)
+    events, report = arrange(events, player.note_map, current_instrument)
+    return events, duration, report
+
+
+def playing_status(name, report):
+    shift = report["transpose"]
+    return f"Playing: {name}" + (f" (Transposed {shift:+d})" if shift else "")
+
+
 def create_random_excerpt(events, duration):
     """Return a random 20-25 second excerpt as relative-delay events."""
     excerpt_duration = min(
@@ -428,11 +441,11 @@ def play_selected():
         messagebox.showwarning("Play", "Select a MIDI File First")
         return
     try:
-        events, duration = parse_midi(playlist[current_index]["path"])
+        events, duration, report = load_song(playlist[current_index]["path"])
     except Exception as e:
         messagebox.showerror("MIDI Error", str(e))
         return
-    set_status(f"Playing: {playlist[current_index]['name']}")
+    set_status(playing_status(playlist[current_index]["name"], report))
     start_playback(events, on_key_press=highlight_keys,
                    song_name=playlist[current_index]["name"], duration=duration)
     if switch_to_heartopia():  # Switch to Heartopia window for key presses
@@ -460,12 +473,12 @@ def play_playlist():
         playlist_box.activate(idx)
         playlist_box.see(idx)
         try:
-            events, duration = parse_midi(playlist[idx]["path"])
+            events, duration, report = load_song(playlist[idx]["path"])
         except Exception as e:
             messagebox.showerror("MIDI Error", str(e))
             play_next(idx+1)
             return
-        set_status(f"Playing: {playlist[idx]['name']}")
+        set_status(playing_status(playlist[idx]["name"], report))
         start_playback(events, on_key_press=highlight_keys, song_name=playlist[idx]["name"], duration=duration)
         if switch_to_heartopia():  # Switch to Heartopia window for key presses
             root.after(FOCUS_CHECK_INTERVAL_MS, check_heartopia_focus)
@@ -499,13 +512,13 @@ def play_musical_chairs():
         playlist_box.activate(current_index)
 
         try:
-            events, duration = parse_midi(playlist[current_index]["path"])
+            events, duration, report = load_song(playlist[current_index]["path"])
         except Exception as e:
             messagebox.showerror("MIDI Error", str(e))
             return
 
         excerpt_events, excerpt_duration = create_random_excerpt(events, duration)
-        set_status(f"Playing: {playlist[current_index]['name']}")
+        set_status(playing_status(playlist[current_index]["name"], report))
         start_playback(excerpt_events, on_key_press=highlight_keys,
                        song_name=playlist[current_index]["name"], duration=excerpt_duration)
         if switch_to_heartopia():

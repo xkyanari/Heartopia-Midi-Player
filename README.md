@@ -27,6 +27,7 @@ to see the designs.
 * Play **MIDI files** directly in the game
 * **Multi-instrument support** (Piano, Lute, Wooden Bass, Recorder, Violin, Cello)
 * Supports **15-key** and **22-key** layouts
+* **Auto-arrangement** fits each song to the selected instrument: one whole-song transpose (to the key with fewest sharps/flats on 15-key instruments), ghost-note cleanup, and chord limits
 * Playlist persistence (remembers loaded MIDI files and instrument selection between sessions)
 * Simple GUI with playback controls
 * **Musical Chairs mode**: randomly plays one bounded 15-25 second excerpt, then stops without an end buffer

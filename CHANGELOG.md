@@ -2,6 +2,11 @@
 
 All notable changes to Heartopia MIDI Player are documented here.
 
+## Unreleased
+
+### Added
+- Songs are arranged for the selected instrument before playback: a single whole-song transpose (best key for 15-key instruments, then best octave), removal of quiet/very short notes, near-simultaneous notes merged into chords, accidentals snapped to free neighbouring keys, duplicate keys removed, and chords capped while keeping melody and bass. The status line shows any transpose.
+
 ## 0.4.10 — 2026-10-07
 
 ### Added

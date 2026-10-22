@@ -107,6 +107,7 @@ class PlaybackDisplayTests(unittest.TestCase):
                 stack.enter_context(patch.object(main, "playlist_box", Mock(), create=True))
                 stack.enter_context(patch.object(main, "loop_mode", "none"))
                 stack.enter_context(patch.object(main, "parse_midi", return_value=([(0, [])], 1)))
+                stack.enter_context(patch.object(main, "player", main.KeyboardPlayer()))
                 stack.enter_context(patch.object(main.random, "randrange", return_value=1))
                 playback = stack.enter_context(patch.object(main, "start_playback"))
                 command()
