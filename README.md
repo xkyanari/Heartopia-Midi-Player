@@ -8,6 +8,18 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 
 <img width="362" height="632" alt="image" src="https://github.com/user-attachments/assets/4aa2eca2-4f78-4771-bd05-3d0c225b2883" />
 
+## UI design drafts
+
+The **five player UI drafts** are in [docs/ui-drafts/index.html](docs/ui-drafts/index.html),
+with a [comparison guide](docs/ui-drafts/README.md). These are design previews for
+choosing a look; they do not change the player.
+
+To view them, clone or download this repository, then double-click
+`docs/ui-drafts/index.html` to open it in your browser. No installation is needed,
+and it works offline. Use **All five** to compare or a numbered button to view one
+draft. On GitHub, the HTML link shows source code; open the downloaded file locally
+to see the designs.
+
 ---
 
 ## Features
@@ -17,7 +29,7 @@ Personally, I believe this tool is harmless and mainly helps players enjoy the g
 * Supports **15-key** and **22-key** layouts
 * Playlist persistence (remembers loaded MIDI files and instrument selection between sessions)
 * Simple GUI with playback controls
-* **Musical Chairs mode**: randomly plays bounded 20-25 second excerpts from random songs, then switches without an end buffer
+* **Musical Chairs mode**: randomly plays one bounded 15-25 second excerpt, then stops without an end buffer
 * **Auto-focus** to Heartopia window on play
 * **Auto-pause** when switching away from Heartopia
 * **Window switching** on pause/resume for seamless control
@@ -122,8 +134,6 @@ You can now select different instruments when playing MIDI files. Each instrumen
 pip install mido keyboard
 ```
 
----
-
 ## How to Run
 
 1. Clone or download this repository:
@@ -145,13 +155,24 @@ pip install -r requirements.txt
 python main.py
 ```
 
-To build a Windows executable, run this from the project folder:
+To build the Windows EXE from one source snapshot, use Windows Python
+3.12 and run this from the project folder:
 
 ```powershell
-python -m PyInstaller --clean --noconfirm main-current.spec
+python tools/build_release.py build
 ```
 
-Each build automatically increments the patch version and creates a new executable in `dist`, such as `main-0.4.1.exe` and then `main-0.4.2.exe`. The app footer and Windows file version metadata are updated to match.
+The wrapper creates a clean venv and an isolated source copy under `build/`.
+The copy runs the spec's patch-version bump once.
+The EXE goes to `dist/`; logs, source hashes, size and hash go to the generated
+`release.json`. After frozen checks, record that version in the workspace once:
+
+```powershell
+python tools/build_release.py record build/release-YYYYMMDD-HHMMSS/release.json
+```
+
+Update the CHANGELOG for that version. Running the spec directly still bumps
+its checkout on every invocation, so use the wrapper for releases.
 
 4. **Using the app:**
 
@@ -159,8 +180,7 @@ Each build automatically increments the patch version and creates a new executab
 * **Delete:** Remove selected MIDI files from the playlist.
 * **Play Selected:** Plays the selected MIDI file (auto-focuses to Heartopia).
 * **Play Playlist:** Plays all MIDI files in order.
-* **Musical Chairs:** Continuously plays a random 20-25 second excerpt from random playlist songs (shorter songs play in full).
-	Each excerpt stops at its selected duration before the next song begins; no song-end buffer is added.
+* **Musical Chairs:** Plays one random 15-25 second excerpt from a playlist song (shorter songs play in full), then stops. No song-end buffer is added.
 * **Pause/Resume:** ⏸ pauses playback, press again to resume (switches windows accordingly).
 * **Stop:** ⏹ stops playback.
 * **Skip:** ⏮ ⏭ navigate through playlist.
@@ -178,7 +198,7 @@ Each build automatically increments the patch version and creates a new executab
 * Instrument preferences are automatically saved in `layout.json`.
 * MIDI notes are automatically transposed to fit within each instrument's range.
 * Playback starts instantly and auto-focuses to Heartopia window.
-* Musical Chairs excerpts start immediately and are limited to 20-25 seconds.
+* Musical Chairs excerpts start immediately, are limited to 15-25 seconds, and stop after one song.
 * Pause works mid-song and switches focus back to the player for control.
 * If you switch away from Heartopia during playback, it auto-pauses.
 
@@ -195,6 +215,8 @@ For best results, use simple MIDI files designed for the specific instrument you
 ---
 
 ## Contributing
+
+To run tests, install `pip install -r requirements-dev.txt`, then run `python -m pytest`.
 
 Feel free to contribute! I built this in a few days, so there's plenty of room for improvement:
 

@@ -23,3 +23,4 @@ songs/
 *.log
 Thumbs.db
 Desktop.ini
+.allium/
