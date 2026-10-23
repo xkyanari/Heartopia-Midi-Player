@@ -295,23 +295,12 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
             set_now_playing()
 
     def calculate_sustain_time(note):
-        """Calculate sustain time for a single note based on MIDI duration.
-
-        Violin and cello hold keys for the arranged note length,
-        capped at the game's maximum sustain value.
-        """
-        max_sustain = SUSTAIN_MAX_MS.get(current_instrument)
-        if max_sustain is None:
+        """How long to hold a note's key: the arranged hold time, capped at
+        the game's maximum sustain (violin, cello) or the tap length."""
+        if not note or len(note) < 3 or note[2] <= 0:
             return KEY_HOLD_MS
-
-        if not note or len(note) < 3:
-            return KEY_HOLD_MS
-
-        duration_ms = note[2]
-        if duration_ms <= 0:
-            return KEY_HOLD_MS
-
-        return min(max_sustain, duration_ms)
+        # Other instruments tap; arrange shortens a tap before a quick repeat.
+        return min(SUSTAIN_MAX_MS.get(current_instrument, KEY_HOLD_MS), note[2])
 
     def play_note_index(i):
         nonlocal event_time

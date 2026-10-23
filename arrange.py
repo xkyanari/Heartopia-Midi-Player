@@ -2,7 +2,8 @@
 from app_config import (
     ARRANGE_ACCOMPANIMENT_HOLD_MS, ARRANGE_CHORD_WINDOW_MS, ARRANGE_DEFAULT_MAX_CHORD,
     ARRANGE_MAX_CHORD, ARRANGE_MAX_HELD_KEYS, ARRANGE_MIN_DURATION_MS, ARRANGE_MIN_HOLD_MS,
-    ARRANGE_MIN_VELOCITY, ARRANGE_REBOW_GAP_MS, ARRANGE_SHIFT_MARGIN, SUSTAIN_MAX_MS,
+    ARRANGE_MIN_VELOCITY, ARRANGE_REBOW_GAP_MS, ARRANGE_SHIFT_MARGIN,
+    ARRANGE_SHORT_NOTE_MIN_VELOCITY, KEY_HOLD_MS, SUSTAIN_MAX_MS,
 )
 from midi_parser import NOTE_NAMES
 
@@ -51,9 +52,14 @@ def _flatten(events):
 
 
 def _clean(notes):
-    """Drop transcription ghosts; keep everything if that would empty the song."""
+    """Drop transcription ghosts; keep everything if that would empty the song.
+
+    Ghosts are quiet. A loud note can be very short when the transcriber writes
+    a re-strike as a 1 ms note, so short notes are dropped only when also quiet.
+    """
     kept = [note for note in notes if note["velocity"] >= ARRANGE_MIN_VELOCITY and
-            note["duration"] >= ARRANGE_MIN_DURATION_MS]
+            (note["duration"] >= ARRANGE_MIN_DURATION_MS or
+             note["velocity"] >= ARRANGE_SHORT_NOTE_MIN_VELOCITY)]
     return kept or notes
 
 
@@ -106,6 +112,24 @@ def _snap(number, used, previous):
     return min(options, key=lambda candidate: abs(candidate - previous))
 
 
+def _rebow_limit(gap_ms):
+    """Longest hold that still leaves the key up before it is pressed again."""
+    return gap_ms - ARRANGE_REBOW_GAP_MS if gap_ms > 2 * ARRANGE_REBOW_GAP_MS else gap_ms / 2
+
+
+def shape_taps(arranged):
+    """Hold times for struck/plucked instruments: a fixed tap, let go early
+    enough before a repeat of the same key that the game sees a new press."""
+    next_press = {}
+    for time, played in reversed(arranged):
+        for note in played:
+            hold = KEY_HOLD_MS
+            if note[0] in next_press:
+                hold = min(hold, _rebow_limit((next_press[note[0]] - time) * 1000))
+            note[1] = max(ARRANGE_MIN_HOLD_MS, int(hold))
+            next_press[note[0]] = time
+
+
 def shape_sustain(arranged, max_hold):
     """Hold times for bowed instruments, in place on [time, [[number, hold, velocity, melody]]].
 
@@ -121,8 +145,7 @@ def shape_sustain(arranged, max_hold):
             if melody and next_onset is not None:
                 hold = min(hold, (next_onset - time) * 1000)
             if number in next_press:
-                gap = (next_press[number] - time) * 1000
-                hold = min(hold, gap - ARRANGE_REBOW_GAP_MS if gap > 2 * ARRANGE_REBOW_GAP_MS else gap / 2)
+                hold = min(hold, _rebow_limit((next_press[number] - time) * 1000))
             note[1] = hold
             next_press[number] = time
         next_onset = time
@@ -144,7 +167,8 @@ def shape_sustain(arranged, max_hold):
 def arrange(events, note_map, instrument=None):
     """Return (events, report) with every note playable on `note_map`.
 
-    Events keep parse_midi's (delay, [(name, octave, duration_ms, velocity)]) shape.
+    Events keep parse_midi's (delay, [(name, octave, ms, velocity)]) shape, but ms is
+    now how long to hold the key on this instrument rather than the note's length.
     """
     low, high, chromatic = instrument_range(note_map)
     max_chord = ARRANGE_MAX_CHORD.get(instrument, ARRANGE_DEFAULT_MAX_CHORD)
@@ -180,6 +204,8 @@ def arrange(events, note_map, instrument=None):
             arranged.append((time, played))
     if instrument in SUSTAIN_MAX_MS:
         shape_sustain(arranged, SUSTAIN_MAX_MS[instrument])
+    else:
+        shape_taps(arranged)
 
     result, last = [], arranged[0][0] if arranged else 0.0
     for index, (time, played) in enumerate(arranged):

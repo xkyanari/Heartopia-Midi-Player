@@ -14,37 +14,38 @@ def parse_midi(path: str):
     events = []
     current_time = 0.0
 
-    # Track active notes to measure their duration
+    # A re-strike ends the pitch's sounding note, like a piano key. Transcribed
+    # MIDI often writes the new note-on before the old note's note-off at the
+    # same instant; that note-off belongs to the note already ended, so skip it.
     active_notes = {}
+    restruck_at = {}
     event_notes = defaultdict(list)
+
+    def finish(note, start_time, velocity, end_time):
+        name, octave = midi_to_note(note)
+        duration_ms = int((end_time - start_time) * 1000)
+        event_notes[start_time].append((name, octave, duration_ms, velocity))
 
     for msg in mid:
         current_time += msg.time
 
-        if msg.type == "note_on":
-            name, octave = midi_to_note(msg.note)
-            if msg.velocity > 0:
-                # Note on - start tracking
-                active_notes[msg.note] = (current_time, msg.velocity)
-            else:
-                # Note off (velocity 0)
-                if msg.note in active_notes:
-                    start_time, velocity = active_notes.pop(msg.note)
-                    duration_ms = int((current_time - start_time) * 1000)
-                    event_notes[start_time].append((name, octave, duration_ms, velocity))
-        elif msg.type == "note_off":
-            name, octave = midi_to_note(msg.note)
+        if msg.type == "note_on" and msg.velocity > 0:
             if msg.note in active_notes:
-                start_time, velocity = active_notes.pop(msg.note)
-                duration_ms = int((current_time - start_time) * 1000)
-                event_notes[start_time].append((name, octave, duration_ms, velocity))
+                finish(msg.note, *active_notes[msg.note], current_time)
+                restruck_at[msg.note] = current_time
+            active_notes[msg.note] = (current_time, msg.velocity)
+        elif msg.type in ("note_on", "note_off"):
+            # note_off, or note_on with velocity 0
+            restrike = restruck_at.pop(msg.note, None)
+            if restrike is not None and abs(current_time - restrike) < 0.002:
+                continue
+            if msg.note in active_notes:
+                finish(msg.note, *active_notes.pop(msg.note), current_time)
 
     # Handle notes that never got a note_off
     end_time = current_time
     for note, (start_time, velocity) in list(active_notes.items()):
-        name, octave = midi_to_note(note)
-        duration_ms = int((end_time - start_time) * 1000)
-        event_notes[start_time].append((name, octave, duration_ms, velocity))
+        finish(note, start_time, velocity, end_time)
 
     sorted_event_times = sorted(event_notes.keys())
     last_time = sorted_event_times[0] if sorted_event_times else 0.0

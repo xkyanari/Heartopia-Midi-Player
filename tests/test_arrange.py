@@ -68,9 +68,10 @@ class ArrangeTests(unittest.TestCase):
         self.assertEqual(arrange(events, note_map("violin"), "violin")[1]["transpose"], 0)
 
     def test_ghost_notes_are_dropped_but_never_the_whole_song(self):
-        events = [(0.0, chord("C4", "E4") + chord("G4", velocity=5)), (0.5, chord("D4", duration=10))]
+        events = [(0.0, chord("C4", "E4") + chord("G4", velocity=5)),
+                  (0.5, chord("D4", duration=10, velocity=30)), (0.5, chord("F4", duration=1))]
         arranged, _ = arrange(events, note_map("piano"), "piano")
-        self.assertEqual(numbers(arranged), [[64, 60]])
+        self.assertEqual(numbers(arranged), [[64, 60], [65]])  # Loud 1 ms re-strike kept.
         quiet = [(0.0, chord("C4", velocity=5))]
         self.assertEqual(numbers(arrange(quiet, note_map("piano"), "piano")[0]), [[60]])
 
@@ -128,10 +129,15 @@ class ArrangeTests(unittest.TestCase):
                 self.assertEqual(self.held_keys(arranged), (3, 0))
                 self.assertTrue(all(note[2] <= 5000 for _, notes in arranged for note in notes))
 
-    def test_plucked_instruments_keep_note_lengths(self):
-        events = [(0.0, chord("C4", "E4", duration=3000))]
-        arranged, _ = arrange(events, note_map("lute"), "lute")
-        self.assertEqual([note[2] for note in arranged[0][1]], [3000, 3000])
+    def test_struck_instruments_tap_and_let_go_before_quick_repeats(self):
+        # Repeated eighth notes 150 ms apart, then a long note.
+        events = [(0.0, chord("G4")), (0.15, chord("G4")), (0.15, chord("G4", "C4", duration=3000))]
+        for instrument in ("piano", "lute"):
+            with self.subTest(instrument=instrument):
+                arranged, _ = arrange(events, note_map(instrument), instrument)
+                holds = [[note[2] for note in notes] for _, notes in arranged]
+                self.assertEqual(holds, [[110], [110], [250, 250]])
+                self.assertEqual(self.held_keys(arranged)[1], 0)
 
     def test_notes_without_velocity_are_accepted(self):
         arranged, _ = arrange([(0.0, [("C", 4, 300)])], note_map("lute"), "lute")

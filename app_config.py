@@ -46,7 +46,8 @@ MUSICAL_CHAIRS_MAX_SECONDS = 25
 
 # Arrangement: fit each song to the selected instrument before playback.
 ARRANGE_MIN_VELOCITY = 20  # Quieter notes are usually transcription ghosts.
-ARRANGE_MIN_DURATION_MS = 40
+ARRANGE_MIN_DURATION_MS = 40  # Shorter notes are dropped unless at least this loud:
+ARRANGE_SHORT_NOTE_MIN_VELOCITY = 50
 ARRANGE_CHORD_WINDOW_MS = 20  # Onsets this close together play as one chord.
 ARRANGE_MAX_CHORD = {"piano": 4}
 ARRANGE_DEFAULT_MAX_CHORD = 3
@@ -57,7 +58,7 @@ ARRANGE_SHIFT_MARGIN = 0.1
 SUSTAIN_MAX_MS = {"violin": 4500, "cello": 5000}  # Game's longest hold per instrument.
 ARRANGE_ACCOMPANIMENT_HOLD_MS = 250
 ARRANGE_MAX_HELD_KEYS = 3
-ARRANGE_REBOW_GAP_MS = 30  # Key-up time before the same key is pressed again.
+ARRANGE_REBOW_GAP_MS = 40  # Key-up time before the same key is pressed again (over a game frame).
 ARRANGE_MIN_HOLD_MS = 30
 
 HEARTOPIA_WINDOW_TITLES = ("Heartopia", "Heartopia.exe", "Heartopia Game")
