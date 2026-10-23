@@ -52,6 +52,21 @@ class ArrangeTests(unittest.TestCase):
         self.assertEqual(report["transpose"] % 12, 0)
         self.assertEqual(numbers(arranged), [[79, 75], [82]])  # Melody first, down an octave.
 
+    def test_low_bass_does_not_move_an_in_range_melody(self):
+        # Bass below the piano's C3 folds up; it must not push the song up an octave.
+        events = [(0.0 if i == 0 else 0.5, chord("C2", "E2", "G2", name))
+                  for i, name in enumerate(["E4", "G4", "C5", "B4"])]
+        arranged, report = arrange(events, note_map("piano"), "piano")
+        self.assertEqual(report["transpose"], 0)
+        self.assertEqual([notes[0] for notes in numbers(arranged)], [64, 67, 72, 71])
+
+    def test_song_already_in_c_is_not_transposed_on_white_key_instruments(self):
+        # C major with one short chromatic passing note.
+        events = [(0.0 if i == 0 else 0.25, chord(name))
+                  for i, name in enumerate(["C5", "D5", "E5", "F5", "G5", "A5", "B5", "C6"])]
+        events.insert(4, (0.25, chord("F#5", duration=100)))
+        self.assertEqual(arrange(events, note_map("violin"), "violin")[1]["transpose"], 0)
+
     def test_ghost_notes_are_dropped_but_never_the_whole_song(self):
         events = [(0.0, chord("C4", "E4") + chord("G4", velocity=5)), (0.5, chord("D4", duration=10))]
         arranged, _ = arrange(events, note_map("piano"), "piano")
@@ -60,14 +75,14 @@ class ArrangeTests(unittest.TestCase):
         self.assertEqual(numbers(arrange(quiet, note_map("piano"), "piano")[0]), [[60]])
 
     def test_chords_are_capped_deduplicated_and_keep_melody_and_bass(self):
-        # Up an octave fits all six notes; the cap keeps top, bottom, then the loudest.
+        # Melody is in range, so no shift; C2 folds onto C3. Cap keeps top, bottom, then the loudest.
         events = [(0.0, chord("C3", "E4", "G4", velocity=40) + chord("C2", velocity=90)
                    + chord("B4", velocity=100) + chord("D4", velocity=70))]
         arranged, _ = arrange(events, note_map("piano"), "piano")
         played = numbers(arranged)[0]
         self.assertEqual(len(played), 4)
         self.assertEqual(len(set(played)), 4)
-        self.assertEqual(played, [83, 48, 74, 60])  # B5 melody, C3 bass, then D5 and C4.
+        self.assertEqual(played, [71, 48, 62, 64])  # B4 melody, C3 bass, then D4 and E4.
 
     def test_notes_folding_onto_one_key_play_once(self):
         arranged, _ = arrange([(0.0, chord("C3", "C6", "C7"))], note_map("violin"), "violin")

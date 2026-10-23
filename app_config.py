@@ -50,6 +50,8 @@ ARRANGE_MIN_DURATION_MS = 40
 ARRANGE_CHORD_WINDOW_MS = 20  # Onsets this close together play as one chord.
 ARRANGE_MAX_CHORD = {"piano": 4}
 ARRANGE_DEFAULT_MAX_CHORD = 3
+# Only transpose when it fits at least this much more of the song (0.1 = 10%).
+ARRANGE_SHIFT_MARGIN = 0.1
 
 HEARTOPIA_WINDOW_TITLES = ("Heartopia", "Heartopia.exe", "Heartopia Game")
 

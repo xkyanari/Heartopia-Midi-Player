@@ -1,7 +1,7 @@
 """Fit parsed MIDI events to the selected instrument's range before playback. No Tk."""
 from app_config import (
     ARRANGE_CHORD_WINDOW_MS, ARRANGE_DEFAULT_MAX_CHORD, ARRANGE_MAX_CHORD,
-    ARRANGE_MIN_DURATION_MS, ARRANGE_MIN_VELOCITY,
+    ARRANGE_MIN_DURATION_MS, ARRANGE_MIN_VELOCITY, ARRANGE_SHIFT_MARGIN,
 )
 from midi_parser import NOTE_NAMES
 
@@ -67,24 +67,31 @@ def _group_onsets(notes):
     return chords
 
 
+def _best_shift(candidates, items, fits):
+    """No shift unless the best one fits clearly more weight (by the margin)."""
+    total = sum(weight for _, weight in items) or 1
+    scores = {shift: sum(weight for number, weight in items if fits(number + shift))
+              for shift in candidates}
+    best = max(scores, key=lambda shift: (scores[shift], -abs(shift)))
+    return 0 if scores[0] >= scores[best] - ARRANGE_SHIFT_MARGIN * total else best
+
+
 def choose_transpose(chords, low, high, chromatic):
-    """One shift for the whole song: best key for white-key instruments, then best octave."""
-    weighted = []
-    for _, chord in chords:
-        top = max(note["number"] for note in chord)
-        for note in chord:
-            # The melody (top voice) should land in range more than accompaniment.
-            weighted.append((note["number"], _weight(note) * (2 if note["number"] == top else 1)))
+    """One shift for the whole song: key for white-key instruments, then octave.
 
-    def best(candidates, score):
-        return max(candidates, key=lambda shift: (score(shift), -abs(shift)))
-
+    Songs stay where they are unless a shift clearly helps. The octave is judged
+    by the melody (top voice) only: out-of-range bass folds up harmlessly, so it
+    must not drag the whole song up an octave.
+    """
+    every = [(note["number"], _weight(note)) for _, chord in chords for note in chord]
+    melody = [(top["number"], _weight(top)) for top in
+              (max(chord, key=lambda note: note["number"]) for _, chord in chords)]
     key_shift = 0
     if not chromatic:
-        key_shift = best(range(-5, 7), lambda shift: sum(
-            weight for number, weight in weighted if (number + shift) % 12 in WHITE_PITCH_CLASSES))
-    octave_shift = best(range(-48, 49, 12), lambda shift: sum(
-        weight for number, weight in weighted if low <= number + key_shift + shift <= high))
+        key_shift = _best_shift(range(-5, 7), every,
+                                         lambda number: number % 12 in WHITE_PITCH_CLASSES)
+    octave_shift = _best_shift(range(-48, 49, 12), melody,
+                                        lambda number: low <= number + key_shift <= high)
     return key_shift + octave_shift
 
 
