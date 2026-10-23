@@ -157,7 +157,8 @@ def shape_sustain(arranged, max_hold):
         if excess > 0:
             active.sort(key=lambda entry: (entry[2][3], entry[1]))
             for _, start, note in active[:excess]:
-                note[1] = (time - start) * 1000
+                # Whole ms: Tk timers reject fractions.
+                note[1] = max(ARRANGE_MIN_HOLD_MS, int((time - start) * 1000))
             active = active[excess:]
         for note in played:
             note[1] = max(ARRANGE_MIN_HOLD_MS, int(note[1]))

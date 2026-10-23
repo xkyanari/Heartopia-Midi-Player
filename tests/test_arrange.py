@@ -129,6 +129,17 @@ class ArrangeTests(unittest.TestCase):
                 self.assertEqual(self.held_keys(arranged), (3, 0))
                 self.assertTrue(all(note[2] <= 5000 for _, notes in arranged for note in notes))
 
+    def test_holds_cut_short_are_whole_milliseconds(self):
+        # A held chord cut short by a new chord 21.35 ms later (Tk timers need ints).
+        events = [(0.0, chord("C4", "E4", "G4", duration=3000)), (0.02135, chord("A4", "C5", "E5"))]
+        for instrument in ("violin", "cello"):
+            with self.subTest(instrument=instrument):
+                arranged, _ = arrange(events, note_map(instrument), instrument)
+                for _, notes in arranged:
+                    for note in notes:
+                        self.assertIsInstance(note[2], int)
+                        self.assertGreaterEqual(note[2], 30)
+
     def test_struck_instruments_tap_and_let_go_before_quick_repeats(self):
         # Repeated eighth notes 150 ms apart, then a long note.
         events = [(0.0, chord("G4")), (0.15, chord("G4")), (0.15, chord("G4", "C4", duration=3000))]
