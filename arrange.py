@@ -1,7 +1,8 @@
 """Fit parsed MIDI events to the selected instrument's range before playback. No Tk."""
 from app_config import (
-    ARRANGE_CHORD_WINDOW_MS, ARRANGE_DEFAULT_MAX_CHORD, ARRANGE_MAX_CHORD,
-    ARRANGE_MIN_DURATION_MS, ARRANGE_MIN_VELOCITY, ARRANGE_SHIFT_MARGIN,
+    ARRANGE_ACCOMPANIMENT_HOLD_MS, ARRANGE_CHORD_WINDOW_MS, ARRANGE_DEFAULT_MAX_CHORD,
+    ARRANGE_MAX_CHORD, ARRANGE_MAX_HELD_KEYS, ARRANGE_MIN_DURATION_MS, ARRANGE_MIN_HOLD_MS,
+    ARRANGE_MIN_VELOCITY, ARRANGE_REBOW_GAP_MS, ARRANGE_SHIFT_MARGIN, SUSTAIN_MAX_MS,
 )
 from midi_parser import NOTE_NAMES
 
@@ -105,6 +106,41 @@ def _snap(number, used, previous):
     return min(options, key=lambda candidate: abs(candidate - previous))
 
 
+def shape_sustain(arranged, max_hold):
+    """Hold times for bowed instruments, in place on [time, [[number, hold, velocity, melody]]].
+
+    The melody plays legato up to the next melody note; accompaniment is a short
+    tap; a key is let go before it is pressed again; and when too many keys would
+    be down at once, the accompaniment (then the oldest notes) is cut short.
+    """
+    next_press, next_onset = {}, None
+    for time, played in reversed(arranged):
+        for note in played:
+            number, hold, _, melody = note
+            hold = min(hold, max_hold) if melody else min(hold, ARRANGE_ACCOMPANIMENT_HOLD_MS)
+            if melody and next_onset is not None:
+                hold = min(hold, (next_onset - time) * 1000)
+            if number in next_press:
+                gap = (next_press[number] - time) * 1000
+                hold = min(hold, gap - ARRANGE_REBOW_GAP_MS if gap > 2 * ARRANGE_REBOW_GAP_MS else gap / 2)
+            note[1] = hold
+            next_press[number] = time
+        next_onset = time
+
+    active = []  # (end, start, note), sorted so cuts hit accompaniment, then oldest.
+    for time, played in arranged:
+        active = [entry for entry in active if entry[0] > time]
+        excess = len(active) + len(played) - ARRANGE_MAX_HELD_KEYS
+        if excess > 0:
+            active.sort(key=lambda entry: (entry[2][3], entry[1]))
+            for _, start, note in active[:excess]:
+                note[1] = (time - start) * 1000
+            active = active[excess:]
+        for note in played:
+            note[1] = max(ARRANGE_MIN_HOLD_MS, int(note[1]))
+            active.append((time + note[1] / 1000, time, note))
+
+
 def arrange(events, note_map, instrument=None):
     """Return (events, report) with every note playable on `note_map`.
 
@@ -137,15 +173,18 @@ def arrange(events, note_map, instrument=None):
             if number in used:
                 continue
             used.add(number)
-            played.append((*note_name(number), note["duration"], note["velocity"]))
+            played.append([number, note["duration"], note["velocity"], note is top])
             if note is top:
                 previous_melody = number
         if played:
             arranged.append((time, played))
+    if instrument in SUSTAIN_MAX_MS:
+        shape_sustain(arranged, SUSTAIN_MAX_MS[instrument])
 
     result, last = [], arranged[0][0] if arranged else 0.0
     for index, (time, played) in enumerate(arranged):
-        result.append((0.0 if index == 0 else time - last, played))
+        result.append((0.0 if index == 0 else time - last,
+                       [(*note_name(number), hold, velocity) for number, hold, velocity, _ in played]))
         last = time
     kept = sum(len(played) for _, played in arranged)
     return result, {"transpose": shift, "notes": len(source), "kept": kept, "snapped": snapped}

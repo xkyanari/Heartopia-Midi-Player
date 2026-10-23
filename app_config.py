@@ -52,6 +52,13 @@ ARRANGE_MAX_CHORD = {"piano": 4}
 ARRANGE_DEFAULT_MAX_CHORD = 3
 # Only transpose when it fits at least this much more of the song (0.1 = 10%).
 ARRANGE_SHIFT_MARGIN = 0.1
+# Bowed instruments sustain at full volume, so piano songs need shaped holds:
+# legato melody, short accompaniment, few keys down at once.
+SUSTAIN_MAX_MS = {"violin": 4500, "cello": 5000}  # Game's longest hold per instrument.
+ARRANGE_ACCOMPANIMENT_HOLD_MS = 250
+ARRANGE_MAX_HELD_KEYS = 3
+ARRANGE_REBOW_GAP_MS = 30  # Key-up time before the same key is pressed again.
+ARRANGE_MIN_HOLD_MS = 30
 
 HEARTOPIA_WINDOW_TITLES = ("Heartopia", "Heartopia.exe", "Heartopia Game")
 

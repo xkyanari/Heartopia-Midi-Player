@@ -96,6 +96,43 @@ class ArrangeTests(unittest.TestCase):
         self.assertEqual(arranged[0][0], 0.0)
         self.assertAlmostEqual(arranged[1][0], 1.01)
 
+    def held_keys(self, arranged):
+        """Most keys down at once, and presses of a key that is still down."""
+        time, ends, most, repressed = 0.0, {}, 0, 0
+        for delay, notes in arranged:
+            time += delay
+            ends = {key: end for key, end in ends.items() if end > time + 1e-9}
+            for note in notes:
+                repressed += (note[0], note[1]) in ends
+                ends[(note[0], note[1])] = time + note[2] / 1000
+            most = max(most, len(ends))
+        return most, repressed
+
+    def test_violin_melody_is_legato_and_accompaniment_short(self):
+        # Pedalled piano: every note rings for 3 s.
+        events = [(0.0 if i == 0 else 0.5, chord("C3", "G3", name, duration=3000))
+                  for i, name in enumerate(["E5", "F5", "G5"])]
+        arranged, _ = arrange(events, note_map("violin"), "violin")
+        for index, (_, notes) in enumerate(arranged):
+            melody, *accompaniment = notes
+            self.assertEqual(melody[2], 500 if index < 2 else 3000)
+            self.assertTrue(all(note[2] <= 250 for note in accompaniment))
+        self.assertLessEqual(self.held_keys(arranged)[0], 3)
+
+    def test_sustained_holds_are_capped_and_repeated_keys_rebowed(self):
+        events = [(0.0 if i == 0 else 0.1, chord(*names, duration=6000))
+                  for i, names in enumerate([("C4", "E4", "G4"), ("C4", "F4", "A4"), ("D4", "G4", "B4")])]
+        for instrument in ("violin", "cello"):
+            with self.subTest(instrument=instrument):
+                arranged, _ = arrange(events, note_map(instrument), instrument)
+                self.assertEqual(self.held_keys(arranged), (3, 0))
+                self.assertTrue(all(note[2] <= 5000 for _, notes in arranged for note in notes))
+
+    def test_plucked_instruments_keep_note_lengths(self):
+        events = [(0.0, chord("C4", "E4", duration=3000))]
+        arranged, _ = arrange(events, note_map("lute"), "lute")
+        self.assertEqual([note[2] for note in arranged[0][1]], [3000, 3000])
+
     def test_notes_without_velocity_are_accepted(self):
         arranged, _ = arrange([(0.0, [("C", 4, 300)])], note_map("lute"), "lute")
         self.assertEqual(numbers(arranged), [[60]])

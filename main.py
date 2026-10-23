@@ -42,6 +42,7 @@ from app_config import (
     PLAYBACK_START_DELAY_MS,
     SETTINGS_SAVE_WARNING,
     SONG_END_BUFFER_SECONDS,
+    SUSTAIN_MAX_MS,
     TITLE_FONT,
     TRANSPORT_FONT,
     UI_FONT,
@@ -260,6 +261,24 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
     clock = playback_clock
     event_time = 0.0
 
+    latest_press = {}  # Scan code -> token of the newest press of that key.
+
+    def scan_code(key):
+        return key["scan_code"] if isinstance(key, dict) else key
+
+    def release_press(key, token):
+        # An older note's timer must not cut off a newer press of the same key.
+        if latest_press.get(scan_code(key)) is token:
+            del latest_press[scan_code(key)]
+            release_keys([key])
+            return
+        try:
+            pressed_keys.remove(key)
+        except ValueError:
+            pass
+        if on_key_press:
+            on_key_press(list(pressed_keys))
+
     def release_keys(keys):
         for k in keys:
             try:
@@ -278,14 +297,11 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
     def calculate_sustain_time(note):
         """Calculate sustain time for a single note based on MIDI duration.
 
-        Violin and cello should hold keys as long as the MIDI note lasts,
+        Violin and cello hold keys for the arranged note length,
         capped at the game's maximum sustain value.
         """
-        if current_instrument == "violin":
-            max_sustain = 4500
-        elif current_instrument == "cello":
-            max_sustain = 5000
-        else:
+        max_sustain = SUSTAIN_MAX_MS.get(current_instrument)
+        if max_sustain is None:
             return KEY_HOLD_MS
 
         if not note or len(note) < 3:
@@ -329,14 +345,18 @@ def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=No
                 if not key:
                     continue
 
+                token = object()
                 try:
+                    if scan_code(key) in latest_press:
+                        release_key(key)  # Re-strike a key that is still held.
                     press_key(key)
                     pressed_keys.append(key)
+                    latest_press[scan_code(key)] = token
                 except Exception:
                     pass
 
                 sustain_ms = calculate_sustain_time(note)
-                rid = root.after(sustain_ms, lambda k=key: release_keys([k]))
+                rid = root.after(sustain_ms, lambda k=key, t=token: release_press(k, t))
                 playback_after_ids.append(rid)
 
             if on_key_press:
