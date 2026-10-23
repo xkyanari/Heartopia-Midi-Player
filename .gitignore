@@ -23,4 +23,9 @@ songs/
 *.log
 Thumbs.db
 Desktop.ini
+
+# Allium local CI/agent settings and state (never commit)
+allium.yml
+allium.yaml
 .allium/
+
