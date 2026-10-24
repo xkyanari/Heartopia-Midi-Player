@@ -13,6 +13,7 @@ dist/
 # Local app state
 layout.json
 playlist.json
+durations.json
 
 # Local song library and exports
 songs/

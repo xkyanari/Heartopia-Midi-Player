@@ -138,7 +138,7 @@ class SettingsLogicTests(unittest.TestCase):
             stack.enter_context(patch.object(main, "midi_folder", directory))
             stack.enter_context(patch.object(main, "playlist", songs))
             append = stack.enter_context(patch.object(main, "append_playlist_song",
-                side_effect=lambda path: songs.append({"path": path})))
+                side_effect=lambda path, **options: songs.append({"path": path})))
             save = stack.enter_context(patch.object(main, "save_playlist"))
             stack.enter_context(patch.object(main, "set_status"))
             main.scan_midi_folder()

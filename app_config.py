@@ -25,6 +25,8 @@ TRANSPORT_FONT = ("Segoe UI", 13)
 
 PLAYLIST_FILE = "playlist.json"
 LAYOUT_FILE = "layout.json"
+DURATION_CACHE_FILE = "durations.json"  # Song lengths, so startup need not read every MIDI.
+DURATION_POLL_MS = 100
 APP_DATA_FOLDER = "Heartopia-Midi-Player"
 STATE_LOCK_FILE = "state.lock"
 STATE_LOCK_TIMEOUT_SECONDS = 5
@@ -66,7 +68,12 @@ HEARTOPIA_WINDOW_TITLES = ("Heartopia", "Heartopia.exe", "Heartopia Game")
 FILE_BUTTONS = {
     "load_midi": "Load MIDI",
     "delete_selected": "Delete",
+    "playlist": "Playlist ▾",
 }
+PLAYLIST_MENU = {
+    "open": "Open Playlist…", "save": "Save Playlist As…", "clear": "Clear Playlist",
+}
+PLAYLIST_FILETYPES = [("M3U Playlists", "*.m3u *.m3u8"), ("All Files", "*.*")]
 
 PLAYBACK_BUTTONS = {
     "previous": "⏮",

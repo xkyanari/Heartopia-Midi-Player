@@ -26,12 +26,22 @@ class PlaylistView(ttk.Treeview):
         width = max(self._font.measure(text) for text in ("--:--", "999:59")) + 12
         self.column("length", anchor=tk.E, width=width, minwidth=width, stretch=False)
 
-    def insert(self, index, values):
+    def _fit_length(self, values):
         # Grow for unusually long durations, keeping the width fixed on resize.
         width = self._font.measure(values[1]) + 12
         if width > self.column("length", "width"):
             self.column("length", width=width, minwidth=width)
+
+    def insert(self, index, values):
+        self._fit_length(values)
         return super().insert("", index, values=values)
+
+    def update_row(self, index, values):
+        self._fit_length(values)
+        self.item(self.get_children()[index], values=values)
+
+    def clear(self):
+        super().delete(*self.get_children())
 
     def curselection(self):
         selected = set(self.selection())

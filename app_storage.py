@@ -5,7 +5,8 @@ import time
 from contextlib import contextmanager
 
 from app_config import (
-    APP_DATA_FOLDER, DEFAULT_INSTRUMENT, DEFAULT_LAYOUT, LAYOUT_FILE, PLAYLIST_FILE,
+    APP_DATA_FOLDER, DEFAULT_INSTRUMENT, DEFAULT_LAYOUT, DURATION_CACHE_FILE, LAYOUT_FILE,
+    PLAYLIST_FILE,
     STATE_LOCK_FILE, STATE_LOCK_POLL_SECONDS, STATE_LOCK_TIMEOUT_SECONDS,
 )
 
@@ -88,6 +89,68 @@ def load_playlist_paths():
             return [path for path in json.load(f) if os.path.exists(path)]
     except Exception:
         return []
+
+
+def load_duration_cache():
+    """{normalized path: {"size", "mtime_ns", "duration"}}; empty when missing or corrupt."""
+    try:
+        with open(DURATION_CACHE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_duration_cache(cache):
+    """Best effort: the cache only speeds up startup, so write failures are ignored."""
+    temporary = DURATION_CACHE_FILE + ".tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+        os.replace(temporary, DURATION_CACHE_FILE)
+    except OSError:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+
+
+def write_m3u(path, songs):
+    """Winamp-style extended M3U (UTF-8). songs: dicts with name, path and duration.
+
+    Paths are written relative to the playlist when possible, so a folder of
+    songs plus its playlist can be moved together.
+    """
+    folder = os.path.dirname(os.path.abspath(path))
+    lines = ["#EXTM3U"]
+    for song in songs:
+        seconds = -1 if song.get("duration") is None else round(song["duration"])
+        try:
+            location = os.path.relpath(song["path"], folder)
+        except ValueError:  # Different drive on Windows.
+            location = os.path.abspath(song["path"])
+        lines += [f"#EXTINF:{seconds},{song['name']}", location]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def read_m3u(path):
+    """[(absolute song path, seconds or None)] from an M3U/M3U8 playlist."""
+    folder = os.path.dirname(os.path.abspath(path))
+    with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+        lines = [line.strip() for line in f]
+    songs, seconds = [], None
+    for line in lines:
+        if line.upper().startswith("#EXTINF:"):
+            try:
+                value = int(line[8:].split(",", 1)[0])
+                seconds = value if value >= 0 else None
+            except ValueError:
+                seconds = None
+        elif line and not line.startswith("#"):
+            songs.append((os.path.normpath(os.path.join(folder, line)), seconds))
+            seconds = None
+    return songs
 
 
 def save_layout_settings(layout, instrument):

@@ -3,6 +3,9 @@ from tkinter import filedialog, messagebox, ttk
 import os
 import random
 import math
+import queue
+import threading
+from collections import deque
 import mido
 from playback_timing import PlaybackClock, format_time
 from playlist_widget import PlaylistView
@@ -11,12 +14,16 @@ from themes import playback_labels
 from ui_theme import MidiVisualizer, button, style_combobox
 
 from app_storage import (
+    load_duration_cache,
     load_settings,
     load_layout_settings,
     load_playlist_paths,
     save_layout_settings,
+    read_m3u,
+    save_duration_cache,
     save_playlist_paths,
     save_settings,
+    write_m3u,
 )
 from arrange import arrange
 from midi_parser import parse_midi
@@ -30,6 +37,7 @@ from app_config import (
     DEFAULT_INSTRUMENT,
     DEFAULT_LAYOUT,
     DEFAULT_STATUS,
+    DURATION_POLL_MS,
     FILE_BUTTONS,
     FOCUS_CHECK_INTERVAL_MS,
     HEARTOPIA_WINDOW_TITLES,
@@ -37,6 +45,8 @@ from app_config import (
     MUSICAL_CHAIRS_MAX_SECONDS,
     MUSICAL_CHAIRS_MIN_SECONDS,
     PAUSE_POLL_INTERVAL_MS,
+    PLAYLIST_FILETYPES,
+    PLAYLIST_MENU,
     PLAYBACK_BUTTONS,
     PLAYBACK_SPEED,
     PLAYBACK_START_DELAY_MS,
@@ -116,15 +126,115 @@ def playlist_row_values(entry):
     return entry["name"], format_time(duration) if duration is not None else "--:--"
 
 
-def append_playlist_song(path):
-    # Invalid files stay removable in the library and report errors when played.
+MISSING = object()  # Length not known yet (new or changed file).
+duration_cache = {}
+duration_cache_dirty = False
+pending_durations = deque()  # Playlist entries whose length a worker thread reads.
+duration_results = queue.Queue()
+duration_worker = None
+duration_polling = False
+
+
+def duration_cache_key(path):
+    return os.path.normcase(os.path.abspath(path))
+
+
+def lookup_duration(path):
+    """Cached length in seconds (None for unreadable files), or MISSING."""
     try:
-        duration = mido.MidiFile(path).length
+        stat = os.stat(path)
+    except OSError:
+        return MISSING
+    cached = duration_cache.get(duration_cache_key(path))
+    if cached and cached.get("size") == stat.st_size and cached.get("mtime_ns") == stat.st_mtime_ns:
+        return cached.get("duration")
+    return MISSING
+
+
+def remember_duration(path, duration):
+    global duration_cache_dirty
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return
+    duration_cache[duration_cache_key(path)] = {
+        "size": stat.st_size, "mtime_ns": stat.st_mtime_ns, "duration": duration}
+    duration_cache_dirty = True
+
+
+def save_durations():
+    global duration_cache_dirty
+    if duration_cache_dirty:
+        save_duration_cache(duration_cache)
+        duration_cache_dirty = False
+
+
+def read_duration(path):
+    try:
+        return mido.MidiFile(path).length
     except Exception:
-        duration = None
-    name = song_title(path)
-    playlist.append({"name": name, "path": path, "duration": duration})
-    playlist_box.insert(tk.END, playlist_row_values(playlist[-1]))
+        return None
+
+
+def append_playlist_song(path, duration=MISSING, defer=False):
+    """Add a song row. With defer, an unknown length is read by a worker thread
+    after the window is up instead of blocking (bulk loads of many songs)."""
+    # Invalid files stay removable in the library and report errors when played.
+    if duration is MISSING:
+        duration = lookup_duration(path)
+    if duration is MISSING and not defer:
+        duration = read_duration(path)
+        remember_duration(path, duration)
+    entry = {"name": song_title(path), "path": path,
+             "duration": None if duration is MISSING else duration}
+    playlist.append(entry)
+    playlist_box.insert(tk.END, playlist_row_values(entry))
+    if duration is MISSING:
+        pending_durations.append(entry)
+        start_duration_worker()
+
+
+def read_pending_durations():
+    """Worker thread: only reads files; Tk widgets are updated by poll_durations."""
+    while True:
+        try:
+            entry = pending_durations.popleft()
+        except IndexError:
+            return
+        duration_results.put((entry, read_duration(entry["path"])))
+
+
+def start_duration_worker():
+    global duration_worker, duration_polling
+    if duration_worker is None or not duration_worker.is_alive():
+        duration_worker = threading.Thread(target=read_pending_durations, name="song-lengths", daemon=True)
+        duration_worker.start()
+    if not duration_polling:
+        duration_polling = True
+        root.after(DURATION_POLL_MS, poll_durations)
+
+
+def poll_durations():
+    global duration_polling
+    while True:
+        try:
+            entry, duration = duration_results.get_nowait()
+        except queue.Empty:
+            break
+        entry["duration"] = duration
+        remember_duration(entry["path"], duration)
+        index = next((i for i, song in enumerate(playlist) if song is entry), None)
+        if index is not None:  # The song may have been deleted meanwhile.
+            playlist_box.update_row(index, playlist_row_values(entry))
+    working = duration_worker is not None and duration_worker.is_alive()
+    if pending_durations and not working:
+        start_duration_worker()  # Songs queued just as the worker finished.
+        working = True
+    if pending_durations or working or not duration_results.empty():
+        root.after(DURATION_POLL_MS, poll_durations)
+    else:
+        duration_polling = False
+        save_durations()
 
 
 def activate_playlist_song(event=None):
@@ -233,6 +343,7 @@ def is_playback_fully_stopped():
 
 def close_app():
     stop()
+    save_durations()
     root.destroy()
 
 def start_playback(events, speed=PLAYBACK_SPEED, on_key_press=None, song_name=None, duration=None):
@@ -634,12 +745,73 @@ def on_instrument_change(event=None):
 # Saving songs
 def save_playlist():
     save_playlist_paths([p["path"] for p in playlist])
+    save_durations()
 
 def load_saved_playlist():
     for path in load_playlist_paths():
-        append_playlist_song(path)
+        append_playlist_song(path, defer=True)
     if playlist:
         set_status(f"{len(playlist)} Files Loaded")
+
+
+def clear_playlist():
+    global current_index
+    playlist.clear()
+    playlist_box.clear()
+    current_index = None
+
+
+def open_playlist():
+    path = filedialog.askopenfilename(initialdir=midi_folder or None, filetypes=PLAYLIST_FILETYPES)
+    if not path:
+        return
+    try:
+        songs = read_m3u(path)
+    except OSError as error:
+        messagebox.showerror("Open Playlist", f"Cannot Read Playlist: {error}")
+        return
+    found = [(song, seconds) for song, seconds in songs if os.path.isfile(song)]
+    clear_playlist()
+    for song, seconds in found:
+        append_playlist_song(song, MISSING if seconds is None else seconds, defer=True)
+    missing = len(songs) - len(found)
+    set_status(f"Opened {os.path.basename(path)}: {len(found)} Songs"
+               + (f", {missing} Missing" if missing else ""))
+    try:
+        save_playlist()
+    except OSError as error:
+        set_status(f"Playlist Not Saved: {error}")
+
+
+def save_playlist_as():
+    path = filedialog.asksaveasfilename(initialdir=midi_folder or None, initialfile="playlist.m3u",
+                                        defaultextension=".m3u", filetypes=PLAYLIST_FILETYPES)
+    if not path:
+        return
+    try:
+        write_m3u(path, playlist)
+    except OSError as error:
+        messagebox.showerror("Save Playlist", f"Cannot Save Playlist: {error}")
+        return
+    set_status(f"Saved {os.path.basename(path)}: {len(playlist)} Songs")
+
+
+def confirm_clear_playlist():
+    if playlist and messagebox.askyesno("Clear Playlist", f"Remove all {len(playlist)} songs from the playlist?"):
+        clear_playlist()
+        save_playlist()
+        set_status(DEFAULT_STATUS)
+
+
+def show_playlist_menu(widget):
+    theme = ui_theme.current()
+    menu = tk.Menu(root, tearoff=0, bg=theme.PANEL_COLOR, fg=theme.TEXT_COLOR,
+                   activebackground=theme.HOVER_COLOR, activeforeground=theme.TEXT_COLOR, font=UI_FONT)
+    menu.add_command(label=PLAYLIST_MENU["open"], command=open_playlist)
+    menu.add_command(label=PLAYLIST_MENU["save"], command=save_playlist_as)
+    menu.add_separator()
+    menu.add_command(label=PLAYLIST_MENU["clear"], command=confirm_clear_playlist)
+    menu.tk_popup(widget.winfo_rootx(), widget.winfo_rooty() + widget.winfo_height())
 
 def save_layout():
     try:
@@ -700,7 +872,7 @@ def scan_midi_folder():
     for path in paths:
         key = normalize(path)
         if key not in known:
-            append_playlist_song(path)
+            append_playlist_song(path, defer=True)
             known.add(key)
             added += 1
     if added:
@@ -846,6 +1018,8 @@ def build_player_ui():
     actions.pack(side=tk.BOTTOM, pady=(0, 4))
     for i, (key, command) in enumerate((("load_midi", load_midi), ("delete_selected", delete_selected))):
         button(actions, FILE_BUTTONS[key], command, width=9).grid(row=0, column=i, padx=3, pady=2)
+    playlist_button = button(actions, FILE_BUTTONS["playlist"], lambda: show_playlist_menu(playlist_button), width=9)
+    playlist_button.grid(row=0, column=2, padx=3, pady=2)
     library = tk.Frame(playlist_card, bg=theme.CARD_COLOR)
     library.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 4))
     playlist_box = PlaylistView(library, theme)
@@ -898,6 +1072,7 @@ def main():
     load_layout()
     instrument_var.set(INSTRUMENT_DISPLAY_NAMES[current_instrument])
     player = KeyboardPlayer(layout=current_layout, instrument=current_instrument)
+    duration_cache.update(load_duration_cache())
     load_saved_playlist()
     scan_midi_folder()
     root.protocol("WM_DELETE_WINDOW", close_app)

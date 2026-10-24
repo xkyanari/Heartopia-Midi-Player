@@ -179,6 +179,7 @@ its checkout on every invocation, so use the wrapper for releases.
 
 * **Load MIDI files:** Click `Load MIDI` and select `.mid` or `.midi` files.
 * **Delete:** Remove selected MIDI files from the playlist.
+* **Playlist ▾:** *Open Playlist…* replaces the list with a saved `.m3u`/`.m3u8` playlist, *Save Playlist As…* saves the current list as an `.m3u` (Winamp-style, with song lengths), and *Clear Playlist* empties it. Song lengths are remembered in `durations.json`, so large playlists open instantly; new songs show `--:--` until their length is read in the background.
 * **Play Selected:** Plays the selected MIDI file (auto-focuses to Heartopia).
 * **Play Playlist:** Plays all MIDI files in order.
 * **Musical Chairs:** Plays one random 15-25 second excerpt from a playlist song (shorter songs play in full), then stops. No song-end buffer is added.
